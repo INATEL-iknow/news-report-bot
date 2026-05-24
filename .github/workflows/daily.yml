@@ -1,0 +1,30 @@
+name: Daily News Report
+
+on:
+  schedule:
+    # 매일 한국시간 09:00 = UTC 00:00
+    - cron: '0 0 * * *'
+  workflow_dispatch:  # 수동 실행 버튼도 활성화
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 라이브러리 설치
+        run: |
+          pip install feedparser beautifulsoup4 python-dateutil
+
+      - name: 메일 발송 실행
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: python main.py
