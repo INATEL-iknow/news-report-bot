@@ -1,30 +1,36 @@
-name: Daily News Report
+import config
+from collector import fetch_all
+from processor import curate_by_category
+from insight import enrich_items
+from renderer import render
+from sender import send
 
-on:
-  schedule:
-    - cron: '0 0 * * *'
-  workflow_dispatch:
+def main():
+    items = fetch_all(config.FEEDS, hours=24)
+    print(f"수집: {len(items)}건")
 
-jobs:
-  send-report:
-    runs-on: ubuntu-latest
-    steps:
-      - name: 코드 체크아웃
-        uses: actions/checkout@v4
+    items_by_cat = curate_by_category(
+        items,
+        config.KEYWORDS_BOOST,
+        config.KEYWORDS_BLOCK,
+        config.CATEGORY_QUOTA,
+    )
+    for cat, lst in items_by_cat.items():
+        print(f"  - {cat}: {len(lst)}건")
 
-      - name: Python 설치
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+    if config.ANTHROPIC_API_KEY:
+        print("🤖 Claude AI로 인사이트 생성 중...")
+        items_by_cat = enrich_items(
+            items_by_cat,
+            config.ANTHROPIC_API_KEY,
+            config.PIGLEMAPS_CONTEXT,
+        )
+    else:
+        print("⚠️ ANTHROPIC_API_KEY 없음 - 인사이트 생략")
 
-      - name: 라이브러리 설치
-        run: |
-          pip install feedparser beautifulsoup4 python-dateutil anthropic
+    subject, html = render(items_by_cat)
+    send(subject, html, config)
+    print("✅ 발송 완료")
 
-      - name: 메일 발송 실행
-        env:
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASS: ${{ secrets.SMTP_PASS }}
-          MAIL_TO: ${{ secrets.MAIL_TO }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python main.py
+if __name__ == "__main__":
+    main()
