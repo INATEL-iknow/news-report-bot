@@ -21,10 +21,21 @@ def gnews(query, lang="ko"):
 # RSS 소스
 FEEDS = {
     "오늘의출시도구": [
+        # Product Hunt - 메인 소스
         "https://www.producthunt.com/feed",
+        # BetaList - 출시 예정 스타트업
+        "https://feeds.feedburner.com/BetaList",
+        # Hacker News - Launch HN (출시 카테고리)
+        "https://hnrss.org/launches",
+        # Google 뉴스로 추가 보강
+        gnews("AI tool launch", lang="en"),
+        gnews("new app launched", lang="en"),
+        gnews("indie product launch", lang="en"),
     ],
     "사이드프로젝트": [
+        # Hacker News - Show HN (개발자들의 사이드 프로젝트)
         "https://hnrss.org/show",
+        # Indie Hackers - 1인 개발자 사례
         "https://www.indiehackers.com/feed.xml",
     ],
     "외국인마케팅성공사례": [
@@ -95,7 +106,7 @@ PIGLEMAPS_CONTEXT = """
 
 KEYWORDS_BOOST = [
     "AI", "GPT", "Claude", "automation", "tool", "app",
-    "launched", "build", "side project", "indie", "MVP",
+    "launched", "launch", "build", "side project", "indie", "MVP",
     "성공", "캠페인", "사례", "마케팅", "브랜딩", "전환율",
     "고객 유치", "바이럴", "성과",
     "외국인", "방한", "관광객", "인바운드", "한류", "K-",
