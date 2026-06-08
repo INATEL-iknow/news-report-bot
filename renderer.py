@@ -1,15 +1,31 @@
 from datetime import datetime
 
 CAT_CONFIG = {
-    "창업·아이디어": {"icon": "💡", "color": "#4a90e2"},
+    "바이브코딩": {"icon": "💡", "color": "#4a90e2"},
+    "외국인마케팅성공사례": {"icon": "🌏", "color": "#9b59b6"},
     "방한외국인": {"icon": "🇰🇷", "color": "#e94e77"},
-    "사회·경제": {"icon": "📊", "color": "#5cb85c"},
+    "정부지원금": {"icon": "💰", "color": "#27ae60"},
+}
+
+CAT_DISPLAY = {
+    "바이브코딩": "바이브 코딩 아이디어",
+    "외국인마케팅성공사례": "외국인 마케팅 성공사례",
+    "방한외국인": "방한 외국인 트렌드",
+    "정부지원금": "관광·창업 지원금",
 }
 
 LEVEL_BADGES = {
     "Core": ('🎯', '#4a90e2', 'Core (즉시)'),
     "Adjacent": ('🔄', '#f0ad4e', 'Adjacent (1-3개월)'),
     "Transformative": ('🚀', '#d9534f', 'Transformative (6개월+)'),
+}
+
+PRIORITY_COLORS = {
+    "높음": "#d9534f",
+    "매우높음": "#c0392b",
+    "중간": "#f0ad4e",
+    "낮음": "#999",
+    "보통": "#999",
 }
 
 HTML_TMPL = """<!doctype html>
@@ -21,8 +37,7 @@ HTML_TMPL = """<!doctype html>
   <p style="color:#666;font-size:13px;">{date} · 총 {n}건 · AI 분석 포함</p>
   {body}
   <p style="color:#999;font-size:11px;margin-top:24px;text-align:center;">
-    Claude AI 인사이트 · 출근길 한 줄 정리<br>
-    💡 Core 70% / 🔄 Adjacent 20% / 🚀 Transformative 10%
+    Claude AI 인사이트 · 매일 오전 9시 자동 발송
   </p>
 </body></html>"""
 
@@ -35,16 +50,34 @@ def _badge(level):
     icon, color, label = LEVEL_BADGES.get(level, ('•', '#999', level or ''))
     return f'<span style="display:inline-block;padding:2px 8px;background:{color};color:#fff;font-size:11px;border-radius:10px;font-weight:600;">{icon} {label}</span>'
 
-def _insight_block_startup(insight):
+def _priority_badge(priority):
+    color = PRIORITY_COLORS.get(priority, "#999")
+    return f'<span style="display:inline-block;padding:2px 8px;background:{color};color:#fff;font-size:11px;border-radius:10px;font-weight:600;">우선순위 {priority}</span>'
+
+def _insight_vibecoding(insight):
     if not insight: return ""
     return f"""<div style="margin-top:8px;padding:10px;background:#f0f7ff;border-radius:6px;font-size:13px;">
   {_badge(insight.get('innovation_level'))}
   <div style="margin-top:8px;"><b>💡 아이디어:</b> {insight.get('idea','')}</div>
+  <div style="margin-top:4px;"><b>🎯 타겟:</b> {insight.get('target_user','')}</div>
   <div style="margin-top:4px;"><b>💰 수익화:</b> {insight.get('monetization','')}</div>
+  <div style="margin-top:4px;"><b>📊 예상 월 수익:</b> <b style="color:#27ae60;">{insight.get('revenue_estimate','')}</b></div>
   <div style="margin-top:4px;color:#666;font-size:12px;">🛠 {insight.get('key_tech','')} · 난이도 {insight.get('build_difficulty','')}</div>
 </div>"""
 
-def _insight_block_inbound(insight):
+def _insight_marketing(insight):
+    if not insight: return ""
+    metric = insight.get('key_metric', '')
+    metric_html = f'<div style="margin-top:4px;"><b>📈 성과:</b> {metric}</div>' if metric and metric != "없음" else ""
+    return f"""<div style="margin-top:8px;padding:10px;background:#faf5ff;border-radius:6px;font-size:13px;">
+  {_priority_badge(insight.get('priority','중간'))}
+  <div style="margin-top:8px;"><b>✨ 성공 요인:</b> {insight.get('success_factor','')}</div>
+  {metric_html}
+  <div style="margin-top:4px;"><b>🎯 피글맵스 적용:</b> {insight.get('piglemaps_application','')}</div>
+  <div style="margin-top:4px;color:#666;font-size:12px;">⏱ {insight.get('execution_difficulty','')}</div>
+</div>"""
+
+def _insight_inbound(insight):
     if not insight: return ""
     return f"""<div style="margin-top:8px;padding:10px;background:#fff0f5;border-radius:6px;font-size:13px;">
   {_badge(insight.get('innovation_level'))}
@@ -53,19 +86,29 @@ def _insight_block_inbound(insight):
   <div style="margin-top:4px;color:#666;font-size:12px;">💰 {insight.get('revenue_model','')} · 우선순위 {insight.get('priority','')}</div>
 </div>"""
 
-def _insight_block_economy(insight):
+def _insight_grant(insight):
     if not insight: return ""
-    tag = insight.get('category_tag','')
+    fit = insight.get('fit_for_piglemaps', '보통')
+    fit_color = PRIORITY_COLORS.get(fit, "#999")
+    fit_badge = f'<span style="display:inline-block;padding:2px 8px;background:{fit_color};color:#fff;font-size:11px;border-radius:10px;font-weight:600;">피글맵스 적합도 {fit}</span>'
+    
+    deadline = insight.get('deadline', '')
+    deadline_html = f'<div style="margin-top:4px;"><b>⏰ 일정:</b> <b style="color:#d9534f;">{deadline}</b></div>' if deadline and deadline != "없음" else ""
+    
     return f"""<div style="margin-top:8px;padding:10px;background:#f0fff4;border-radius:6px;font-size:13px;">
-  <span style="display:inline-block;padding:2px 8px;background:#5cb85c;color:#fff;font-size:11px;border-radius:10px;font-weight:600;">📊 {tag}</span>
-  <div style="margin-top:8px;"><b>📝 요약:</b> {insight.get('summary','')}</div>
-  <div style="margin-top:4px;"><b>🎯 활용:</b> {insight.get('actionable','')}</div>
+  {fit_badge}
+  <div style="margin-top:8px;"><b>📋 사업명:</b> {insight.get('program_name','')}</div>
+  <div style="margin-top:4px;"><b>🎯 대상:</b> {insight.get('target','')}</div>
+  <div style="margin-top:4px;"><b>💵 지원 규모:</b> {insight.get('support_amount','')}</div>
+  {deadline_html}
+  <div style="margin-top:6px;padding:6px;background:#fff;border-radius:4px;"><b>✅ 액션:</b> {insight.get('action','')}</div>
 </div>"""
 
 INSIGHT_RENDERERS = {
-    "창업·아이디어": _insight_block_startup,
-    "방한외국인": _insight_block_inbound,
-    "사회·경제": _insight_block_economy,
+    "바이브코딩": _insight_vibecoding,
+    "외국인마케팅성공사례": _insight_marketing,
+    "방한외국인": _insight_inbound,
+    "정부지원금": _insight_grant,
 }
 
 def _item(item, cat):
@@ -86,11 +129,12 @@ def render(items_by_cat):
     for cat, items in items_by_cat.items():
         if not items: continue
         cfg = CAT_CONFIG.get(cat, {})
+        display = CAT_DISPLAY.get(cat, cat)
         item_html = "\n".join(_item(it, cat) for it in items)
         sections.append(SECTION_TMPL.format(
             icon=cfg.get("icon", "•"),
             color=cfg.get("color", "#333"),
-            cat=cat,
+            cat=display,
             n=len(items),
             items=item_html,
         ))
