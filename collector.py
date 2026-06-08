@@ -1,10 +1,6 @@
 import feedparser
-import urllib.request
-from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from dateutil import parser as dtparser
-
-USER_AGENT = "Mozilla/5.0 (compatible; NewsBot/1.0)"
 
 def fetch_all(feeds: dict, hours: int = 24):
     """RSS 피드에서 최근 N시간 이내 기사만 수집"""
