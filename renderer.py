@@ -1,14 +1,16 @@
 from datetime import datetime
 
 CAT_CONFIG = {
-    "바이브코딩": {"icon": "💡", "color": "#4a90e2"},
+    "오늘의출시도구": {"icon": "🛠", "color": "#16a085"},
+    "사이드프로젝트": {"icon": "💭", "color": "#8e44ad"},
     "외국인마케팅성공사례": {"icon": "🌏", "color": "#9b59b6"},
     "방한외국인": {"icon": "🇰🇷", "color": "#e94e77"},
     "정부지원금": {"icon": "💰", "color": "#27ae60"},
 }
 
 CAT_DISPLAY = {
-    "바이브코딩": "바이브 코딩 아이디어",
+    "오늘의출시도구": "오늘의 출시 도구 (영감)",
+    "사이드프로젝트": "사이드 프로젝트 사례",
     "외국인마케팅성공사례": "외국인 마케팅 성공사례",
     "방한외국인": "방한 외국인 트렌드",
     "정부지원금": "관광·창업 지원금",
@@ -46,29 +48,51 @@ SECTION_TMPL = """<h3 style="margin-top:28px;padding:8px 0;border-bottom:2px sol
 </h3>
 {items}"""
 
-def _badge(level):
-    icon, color, label = LEVEL_BADGES.get(level, ('•', '#999', level or ''))
-    return f'<span style="display:inline-block;padding:2px 8px;background:{color};color:#fff;font-size:11px;border-radius:10px;font-weight:600;">{icon} {label}</span>'
-
 def _priority_badge(priority):
     color = PRIORITY_COLORS.get(priority, "#999")
     return f'<span style="display:inline-block;padding:2px 8px;background:{color};color:#fff;font-size:11px;border-radius:10px;font-weight:600;">우선순위 {priority}</span>'
 
-def _insight_vibecoding(insight):
+def _level_badge(level):
+    icon, color, label = LEVEL_BADGES.get(level, ('•', '#999', level or ''))
+    return f'<span style="display:inline-block;padding:2px 8px;background:{color};color:#fff;font-size:11px;border-radius:10px;font-weight:600;">{icon} {label}</span>'
+
+def _insight_tool(insight):
     if not insight: return ""
-    return f"""<div style="margin-top:8px;padding:10px;background:#f0f7ff;border-radius:6px;font-size:13px;">
-  {_badge(insight.get('innovation_level'))}
-  <div style="margin-top:8px;"><b>💡 아이디어:</b> {insight.get('idea','')}</div>
+    return f"""<div style="margin-top:8px;padding:12px;background:#e8f8f5;border-radius:6px;font-size:13px;border-left:3px solid #16a085;">
+  <div><b>🔧 이 도구는:</b> {insight.get('what_it_does','')}</div>
+  <div style="margin-top:6px;padding:8px;background:#fff;border-radius:4px;">
+    <b>💡 한국 버전 아이디어:</b> {insight.get('korean_market_idea','')}
+  </div>
+  <div style="margin-top:6px;"><b>🎯 타겟:</b> {insight.get('target_user','')}</div>
+  <div style="margin-top:4px;"><b>💰 수익화:</b> {insight.get('monetization','')}</div>
+  <div style="margin-top:4px;"><b>📊 예상 월 수익:</b> <b style="color:#27ae60;">{insight.get('revenue_estimate','')}</b></div>
+  <div style="margin-top:4px;color:#666;font-size:12px;">🛠 {insight.get('key_tech','')} · ⏱ {insight.get('build_time','')}</div>
+  <div style="margin-top:8px;padding:8px;background:#fff8dc;border-radius:4px;">
+    <b>✅ 내일 첫 액션:</b> {insight.get('first_step','')}
+  </div>
+</div>"""
+
+def _insight_sideproject(insight):
+    if not insight: return ""
+    return f"""<div style="margin-top:8px;padding:12px;background:#f5eef8;border-radius:6px;font-size:13px;border-left:3px solid #8e44ad;">
+  <div><b>📦 그들이 만든 것:</b> {insight.get('what_they_built','')}</div>
+  <div style="margin-top:6px;"><b>💎 배울 점:</b> {insight.get('their_insight','')}</div>
+  <div style="margin-top:6px;padding:8px;background:#fff;border-radius:4px;">
+    <b>💡 본인 버전 아이디어:</b> {insight.get('my_version_idea','')}
+  </div>
   <div style="margin-top:4px;"><b>🎯 타겟:</b> {insight.get('target_user','')}</div>
   <div style="margin-top:4px;"><b>💰 수익화:</b> {insight.get('monetization','')}</div>
   <div style="margin-top:4px;"><b>📊 예상 월 수익:</b> <b style="color:#27ae60;">{insight.get('revenue_estimate','')}</b></div>
-  <div style="margin-top:4px;color:#666;font-size:12px;">🛠 {insight.get('key_tech','')} · 난이도 {insight.get('build_difficulty','')}</div>
+  <div style="margin-top:4px;color:#666;font-size:12px;">난이도 {insight.get('execution_difficulty','')}</div>
+  <div style="margin-top:8px;padding:8px;background:#fff8dc;border-radius:4px;">
+    <b>✅ 내일 첫 액션:</b> {insight.get('first_step','')}
+  </div>
 </div>"""
 
 def _insight_marketing(insight):
     if not insight: return ""
     metric = insight.get('key_metric', '')
-    metric_html = f'<div style="margin-top:4px;"><b>📈 성과:</b> {metric}</div>' if metric and metric != "없음" else ""
+    metric_html = f'<div style="margin-top:4px;"><b>📈 성과:</b> {metric}</div>' if metric and metric not in ("없음", "정보 없음") else ""
     return f"""<div style="margin-top:8px;padding:10px;background:#faf5ff;border-radius:6px;font-size:13px;">
   {_priority_badge(insight.get('priority','중간'))}
   <div style="margin-top:8px;"><b>✨ 성공 요인:</b> {insight.get('success_factor','')}</div>
@@ -80,7 +104,7 @@ def _insight_marketing(insight):
 def _insight_inbound(insight):
     if not insight: return ""
     return f"""<div style="margin-top:8px;padding:10px;background:#fff0f5;border-radius:6px;font-size:13px;">
-  {_badge(insight.get('innovation_level'))}
+  {_level_badge(insight.get('innovation_level'))}
   <div style="margin-top:8px;"><b>🔗 연결:</b> {insight.get('connection','')}</div>
   <div style="margin-top:4px;"><b>🛍 상품 아이디어:</b> {insight.get('product_idea','')}</div>
   <div style="margin-top:4px;color:#666;font-size:12px;">💰 {insight.get('revenue_model','')} · 우선순위 {insight.get('priority','')}</div>
@@ -93,7 +117,7 @@ def _insight_grant(insight):
     fit_badge = f'<span style="display:inline-block;padding:2px 8px;background:{fit_color};color:#fff;font-size:11px;border-radius:10px;font-weight:600;">피글맵스 적합도 {fit}</span>'
     
     deadline = insight.get('deadline', '')
-    deadline_html = f'<div style="margin-top:4px;"><b>⏰ 일정:</b> <b style="color:#d9534f;">{deadline}</b></div>' if deadline and deadline != "없음" else ""
+    deadline_html = f'<div style="margin-top:4px;"><b>⏰ 일정:</b> <b style="color:#d9534f;">{deadline}</b></div>' if deadline and deadline not in ("없음", "정보 없음") else ""
     
     return f"""<div style="margin-top:8px;padding:10px;background:#f0fff4;border-radius:6px;font-size:13px;">
   {fit_badge}
@@ -105,7 +129,8 @@ def _insight_grant(insight):
 </div>"""
 
 INSIGHT_RENDERERS = {
-    "바이브코딩": _insight_vibecoding,
+    "오늘의출시도구": _insight_tool,
+    "사이드프로젝트": _insight_sideproject,
     "외국인마케팅성공사례": _insight_marketing,
     "방한외국인": _insight_inbound,
     "정부지원금": _insight_grant,
