@@ -13,6 +13,9 @@ def main():
         items,
         config.KEYWORDS_BOOST,
         config.KEYWORDS_BLOCK,
+        config.SPAM_PHRASES,
+        config.MIN_SUMMARY_LENGTH,
+        config.DEDUPE_THRESHOLD,
         config.CATEGORY_QUOTA,
     )
     for cat, lst in items_by_cat.items():
