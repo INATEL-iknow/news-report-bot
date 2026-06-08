@@ -1,5 +1,5 @@
 import config
-from collector import fetch_all, fetch_github_trending
+from collector import fetch_all
 from processor import curate_by_category
 from insight import enrich_items
 from renderer import render
@@ -7,11 +7,7 @@ from sender import send
 
 def main():
     items = fetch_all(config.FEEDS, hours=24)
-    print(f"RSS 수집: {len(items)}건")
-    
-    github_items = fetch_github_trending(since="daily", limit=15)
-    items.extend(github_items)
-    print(f"전체 수집: {len(items)}건")
+    print(f"수집: {len(items)}건")
 
     items_by_cat = curate_by_category(
         items,
