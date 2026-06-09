@@ -1,6 +1,10 @@
 import feedparser
+import urllib.request
+import json
 from datetime import datetime, timedelta, timezone
 from dateutil import parser as dtparser
+
+USER_AGENT = "Mozilla/5.0 (compatible; NewsBot/1.0)"
 
 def fetch_all(feeds: dict, hours: int = 24):
     """RSS 피드에서 최근 N시간 이내 기사만 수집"""
@@ -35,58 +39,80 @@ def fetch_all(feeds: dict, hours: int = 24):
                 print(f"[WARN] {url}: {ex}")
     return items
 
-def fetch_github_trending(language="", since="daily", limit=15):
-    """GitHub Trending 페이지 스크래핑"""
-    url = f"https://github.com/trending"
-    if language:
-        url += f"/{language}"
-    url += f"?since={since}"
-    
+def fetch_reddit_posts(subreddits, top_per_sub=4, question_limit=10):
+    """Reddit 서브레딧에서 인기 글 + 질문 글 수집"""
     items = []
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(req, timeout=15) as response:
-            html = response.read().decode("utf-8")
-        
-        soup = BeautifulSoup(html, "html.parser")
-        repos = soup.select("article.Box-row")[:limit]
-        
-        for repo in repos:
-            try:
-                title_tag = repo.select_one("h2.h3 a")
-                if not title_tag:
+    
+    # 1. 각 서브레딧에서 24시간 인기 글
+    for sub in subreddits:
+        try:
+            url = f"https://www.reddit.com/r/{sub}/top.json?t=day&limit={top_per_sub}"
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(req, timeout=15) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            
+            for post in data.get("data", {}).get("children", []):
+                p = post["data"]
+                # NSFW나 광고 제외
+                if p.get("over_18") or p.get("stickied"):
                     continue
-                repo_path = title_tag.get("href", "").strip("/")
-                title = repo_path
-                link = f"https://github.com/{repo_path}"
-                
-                desc_tag = repo.select_one("p")
-                description = desc_tag.text.strip() if desc_tag else ""
-                
-                lang_tag = repo.select_one('[itemprop="programmingLanguage"]')
-                language_name = lang_tag.text.strip() if lang_tag else ""
-                
-                star_tag = repo.select_one(".float-sm-right")
-                stars_today = star_tag.text.strip() if star_tag else ""
-                
-                summary = f"{description}"
-                if language_name:
-                    summary += f" [언어: {language_name}]"
-                if stars_today:
-                    summary += f" [{stars_today}]"
                 
                 items.append({
-                    "category": "오늘의출시도구",
-                    "title": title,
-                    "link": link,
-                    "summary": summary,
-                    "published": datetime.now(timezone.utc),
-                    "source": "GitHub Trending",
+                    "category": "Reddit인사이트",
+                    "subcategory": "인기",
+                    "title": p.get("title", "").strip(),
+                    "link": f"https://reddit.com{p.get('permalink', '')}",
+                    "summary": (p.get("selftext", "") or "")[:500].strip(),
+                    "published": datetime.fromtimestamp(p.get("created_utc", 0), tz=timezone.utc),
+                    "source": f"r/{sub}",
+                    "score": p.get("score", 0),
+                    "num_comments": p.get("num_comments", 0),
                 })
-            except Exception:
-                continue
-        print(f"  GitHub Trending: {len(items)}건 수집")
-    except Exception as e:
-        print(f"[WARN] GitHub Trending 실패: {e}")
+        except Exception as e:
+            print(f"[WARN] r/{sub} 실패: {e}")
     
+    # 2. 질문 글 (search API로 한국 관련 질문 찾기)
+    question_keywords = [
+        "korea+travel+how", 
+        "seoul+where+to",
+        "korea+tips",
+        "visiting+seoul"
+    ]
+    
+    for keyword in question_keywords[:2]:  # API 부하 줄이려고 2개만
+        try:
+            url = f"https://www.reddit.com/search.json?q={keyword}&sort=new&t=week&limit=5"
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(req, timeout=15) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            
+            for post in data.get("data", {}).get("children", []):
+                p = post["data"]
+                if p.get("over_18") or p.get("stickied"):
+                    continue
+                
+                title = p.get("title", "").strip()
+                # 질문 형식인지 체크
+                is_question = (
+                    "?" in title or
+                    any(w in title.lower() for w in ["how ", "where ", "what ", "is it", "can i", "should i"])
+                )
+                if not is_question:
+                    continue
+                
+                items.append({
+                    "category": "Reddit인사이트",
+                    "subcategory": "질문",
+                    "title": title,
+                    "link": f"https://reddit.com{p.get('permalink', '')}",
+                    "summary": (p.get("selftext", "") or "")[:500].strip(),
+                    "published": datetime.fromtimestamp(p.get("created_utc", 0), tz=timezone.utc),
+                    "source": f"r/{p.get('subreddit', 'unknown')}",
+                    "score": p.get("score", 0),
+                    "num_comments": p.get("num_comments", 0),
+                })
+        except Exception as e:
+            print(f"[WARN] Reddit 검색 {keyword} 실패: {e}")
+    
+    print(f"  Reddit: {len(items)}건 수집")
     return items
