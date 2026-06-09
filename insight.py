@@ -100,7 +100,29 @@ PROMPT_TEMPLATES = {
   "deadline": "신청 마감일 또는 일정",
   "fit_for_piglemaps": "피글맵스 신청 적합도 - 매우높음|높음|보통|낮음",
   "action": "지금 해야 할 행동 (1줄)"
-}}"""
+}}""",
+
+    "Reddit인사이트": """다음은 외국인이 Reddit에 작성한 한국 관련 글입니다. 영어를 한국어로 번역하고, 피글맵스 입장에서 어떤 인사이트를 얻을 수 있는지 분석해주세요.
+
+[피글맵스 정보]
+{context}
+
+[Reddit 글]
+제목 (영어): {title}
+본문 (영어): {summary}
+서브레딧: {source}
+
+다음 JSON 형식으로만 답하세요:
+{{
+  "title_kr": "제목 한국어 번역 (자연스럽게)",
+  "summary_kr": "본문 핵심 한국어 요약 (2~3문장, 본문 없으면 '본문 없음')",
+  "user_intent": "이 사람이 진짜 원하는 것 / 페인포인트 (1줄)",
+  "piglemaps_opportunity": "피글맵스가 이 사람에게 어떤 가치를 줄 수 있는지 (구체적으로)",
+  "content_idea": "이 글을 보고 만들 수 있는 콘텐츠/마케팅 아이디어 (예: '○○ 관련 가이드 영상 제작')",
+  "priority": "높음|중간|낮음 (이 인사이트의 활용 우선순위)"
+}}
+
+⚠️ 매우 구체적으로. 추상적 답변 금지."""
 }
 
 def analyze_item(client, category, item, context=""):
@@ -112,13 +134,14 @@ def analyze_item(client, category, item, context=""):
         title=item.get("title", ""),
         summary=item.get("summary", "")[:500],
         link=item.get("link", ""),
+        source=item.get("source", ""),
         context=context,
     )
     
     try:
         msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=600,
+            max_tokens=700,
             messages=[{"role": "user", "content": prompt}],
         )
         text = msg.content[0].text.strip()
