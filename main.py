@@ -1,13 +1,19 @@
 import config
-from collector import fetch_all
+from collector import fetch_all, fetch_reddit_posts
 from processor import curate_by_category
 from insight import enrich_items
 from renderer import render
 from sender import send
 
 def main():
+    # 1. RSS 피드 수집
     items = fetch_all(config.FEEDS, hours=24)
-    print(f"수집: {len(items)}건")
+    print(f"RSS 수집: {len(items)}건")
+    
+    # 2. Reddit 수집
+    reddit_items = fetch_reddit_posts(config.REDDIT_SUBREDDITS)
+    items.extend(reddit_items)
+    print(f"전체 수집: {len(items)}건")
 
     items_by_cat = curate_by_category(
         items,
