@@ -6,6 +6,7 @@ CAT_CONFIG = {
     "외국인마케팅성공사례": {"icon": "🌏", "color": "#9b59b6"},
     "방한외국인": {"icon": "🇰🇷", "color": "#e94e77"},
     "정부지원금": {"icon": "💰", "color": "#27ae60"},
+    "Reddit인사이트": {"icon": "🗣️", "color": "#ff4500"},
 }
 
 CAT_DISPLAY = {
@@ -14,6 +15,7 @@ CAT_DISPLAY = {
     "외국인마케팅성공사례": "외국인 마케팅 성공사례",
     "방한외국인": "방한 외국인 트렌드",
     "정부지원금": "관광·창업 지원금",
+    "Reddit인사이트": "Reddit - 외국인의 진짜 목소리",
 }
 
 LEVEL_BADGES = {
@@ -128,23 +130,60 @@ def _insight_grant(insight):
   <div style="margin-top:6px;padding:6px;background:#fff;border-radius:4px;"><b>✅ 액션:</b> {insight.get('action','')}</div>
 </div>"""
 
+def _insight_reddit(insight):
+    if not insight: return ""
+    return f"""<div style="margin-top:8px;padding:12px;background:#fff5f0;border-radius:6px;font-size:13px;border-left:3px solid #ff4500;">
+  {_priority_badge(insight.get('priority','중간'))}
+  <div style="margin-top:8px;padding:8px;background:#fff;border-radius:4px;">
+    <div><b>🇰🇷 제목 (한국어):</b> {insight.get('title_kr','')}</div>
+    <div style="margin-top:4px;color:#555;"><b>📝 요약:</b> {insight.get('summary_kr','')}</div>
+  </div>
+  <div style="margin-top:8px;"><b>💭 진짜 원하는 것:</b> {insight.get('user_intent','')}</div>
+  <div style="margin-top:6px;padding:8px;background:#fff8dc;border-radius:4px;">
+    <b>🎯 피글맵스 기회:</b> {insight.get('piglemaps_opportunity','')}
+  </div>
+  <div style="margin-top:6px;padding:6px;background:#e8f4f8;border-radius:4px;">
+    <b>📢 콘텐츠 아이디어:</b> {insight.get('content_idea','')}
+  </div>
+</div>"""
+
+def _reddit_meta(item):
+    """Reddit 글에 대한 추가 메타 정보"""
+    score = item.get('score', 0)
+    comments = item.get('num_comments', 0)
+    subcat = item.get('subcategory', '')
+    subcat_badge = ""
+    if subcat == "인기":
+        subcat_badge = '<span style="background:#ff4500;color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:600;">🔥 인기</span> '
+    elif subcat == "질문":
+        subcat_badge = '<span style="background:#0079d3;color:#fff;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:600;">❓ 질문</span> '
+    return f'<div style="font-size:11px;color:#888;">{subcat_badge}⬆️ {score} · 💬 {comments} · {item.get("source","")}</div>'
+
 INSIGHT_RENDERERS = {
     "오늘의출시도구": _insight_tool,
     "사이드프로젝트": _insight_sideproject,
     "외국인마케팅성공사례": _insight_marketing,
     "방한외국인": _insight_inbound,
     "정부지원금": _insight_grant,
+    "Reddit인사이트": _insight_reddit,
 }
 
 def _item(item, cat):
     color = CAT_CONFIG.get(cat, {}).get("color", "#4a90e2")
     insight_html = INSIGHT_RENDERERS.get(cat, lambda x: "")(item.get("insight"))
+    
+    # Reddit은 메타 정보 다르게 표시
+    if cat == "Reddit인사이트":
+        meta_html = _reddit_meta(item)
+    else:
+        meta_html = f'<div style="font-size:11px;color:#888;">{item.get("source","")}</div>'
+    
     return f"""<div style="margin:14px 0;padding:12px;border-left:3px solid {color};background:#fafafa;border-radius:4px;">
-  <div style="font-size:11px;color:#888;">{item.get('source','')}</div>
+  {meta_html}
   <div style="font-weight:600;font-size:15px;margin:4px 0;">
     <a href="{item.get('link','')}" style="color:#1a1a1a;text-decoration:none;">{item.get('title','')}</a>
   </div>
-  <div style="font-size:13px;color:#555;line-height:1.5;">{item.get('summary','')}</div>
+  <div style="font-size:13px;color:#555;line-height:1.5;">{item.get('summary','')[:200]}</div>
   {insight_html}
 </div>"""
 
