@@ -21,21 +21,15 @@ def gnews(query, lang="ko"):
 # RSS 소스
 FEEDS = {
     "오늘의출시도구": [
-        # Product Hunt - 메인 소스
         "https://www.producthunt.com/feed",
-        # BetaList - 출시 예정 스타트업
         "https://feeds.feedburner.com/BetaList",
-        # Hacker News - Launch HN (출시 카테고리)
         "https://hnrss.org/launches",
-        # Google 뉴스로 추가 보강
         gnews("AI tool launch", lang="en"),
         gnews("new app launched", lang="en"),
         gnews("indie product launch", lang="en"),
     ],
     "사이드프로젝트": [
-        # Hacker News - Show HN (개발자들의 사이드 프로젝트)
         "https://hnrss.org/show",
-        # Indie Hackers - 1인 개발자 사례
         "https://www.indiehackers.com/feed.xml",
     ],
     "외국인마케팅성공사례": [
@@ -71,13 +65,22 @@ FEEDS = {
     ],
 }
 
-# 카테고리별 개수 (총 25건)
+# Reddit 서브레딧
+REDDIT_SUBREDDITS = [
+    "koreatravel",
+    "seoul",
+    "korea",
+    "AskKorea",
+]
+
+# 카테고리별 개수 (총 35건)
 CATEGORY_QUOTA = {
     "오늘의출시도구": 5,
     "사이드프로젝트": 5,
     "외국인마케팅성공사례": 5,
     "방한외국인": 5,
     "정부지원금": 5,
+    "Reddit인사이트": 10,
 }
 
 PIGLEMAPS_CONTEXT = """
@@ -131,6 +134,6 @@ SPAM_PHRASES = [
     "스폰서드", "AD)",
 ]
 
-MAX_ITEMS = 25
+MAX_ITEMS = 35
 MIN_SUMMARY_LENGTH = 30
 DEDUPE_THRESHOLD = 0.65
