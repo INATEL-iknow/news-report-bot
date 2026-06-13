@@ -66,10 +66,13 @@ Generate a Threads post following this EXACT structure:
 
 4. **COMMENT 3** (Piglemaps pitch + Pglemaps DM magnet)
    - Start by addressing the real pain point (planning Korea trip is hard)
-   - List 3-4 typical pain points (route, transport, cost, time)
-   - Introduce Piglemaps as the solution (free, auto-routes)
+   - List 3-4 specific pain points as bullet points (which neighborhood, route, transport, booking order)
+   - Frame Pglemaps as a "must-have" tool that many foreign travelers in Korea already use
+   - Mention it's 100% free
+   - DO NOT mention "no signup" or "no account needed" (signup IS required, don't lie)
    - End with: "Comment 'Pglemaps' below and I'll DM you the link 🗺️"
    - Length: 8-10 lines max
+   - Brand name MUST be "Pglemaps" (NOT "Piglemaps")
 
 [STYLE RULES]
 - Write in English (for English-speaking foreign travelers)
