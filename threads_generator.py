@@ -2,23 +2,24 @@
 Threads 콘텐츠 생성기 (Claude API)
 - 본인이 정한 구조: 본문 + 댓글 3개
 - 본문은 Open Loop (미완성 결말)
-- 댓글 3은 피글맵 + Pglemaps 매그넷
+- 댓글 3은 Pglemaps 대세감 + DM 매그넷
 """
 
 import json
 from anthropic import Anthropic
 
 
-PIGLEMAPS_CONTEXT = """
-[About Piglemaps]
-Piglemaps (pglemaps.com) is a free Korea trip planner built for foreign travelers.
+PGLEMAPS_CONTEXT = """
+[About Pglemaps]
+Pglemaps (pglemaps.com/en) is a free Korea trip planner built for foreign travelers visiting Korea.
+It's becoming a must-have tool that many foreign travelers in Korea already rely on.
 
 What it does:
 - Travelers save the places they want to visit (restaurants, K-Beauty clinics, Hanbok rental, etc.)
-- Piglemaps auto-generates the most efficient route
-- 100% free, no signup hassles
+- Pglemaps auto-generates the most efficient route
+- 100% free to use
 
-Categories on Piglemaps:
+Categories available on Pglemaps:
 - Transportation (Airport Taxi, Car Rental, Shuttle, KTX)
 - Beauty (Hair Salon, Dermatology, Color Analysis, Nail & Makeup)
 - Snap & Experience (Hanbok, K-Pop Class, Cooking Class, Street Snap)
@@ -27,14 +28,14 @@ Categories on Piglemaps:
 - Travel Essentials (Luggage Storage, SIM, Currency Exchange, Medical Translation)
 
 Business model:
-- Affiliate commissions from partner businesses when foreigners book through Piglemaps
+- Affiliate commissions from partner businesses when foreigners book through Pglemaps
 """
 
 
 PROMPT_TEMPLATE = """You are a Korean local sharing real insider knowledge with foreign travelers on Threads.
 
 [CONTEXT]
-{piglemaps_context}
+{pglemaps_context}
 
 [TODAY'S TOPIC]
 Category: {category}
@@ -45,7 +46,7 @@ Generate a Threads post following this EXACT structure:
 
 1. **MAIN POST** (body)
    - Hook: address foreign travelers directly ("Going to Seoul soon?" / "Planning a Korea trip?")
-   - Mention what 90% of foreign travelers usually do (the obvious choice)
+   - Mention what most foreign travelers usually do (the obvious choice)
    - Tease that there's a hidden/better option Koreans actually love
    - Briefly describe the appeal of this hidden option (2-3 specific benefits)
    - End with "The name of this place is —" or similar incomplete ending
@@ -64,15 +65,15 @@ Generate a Threads post following this EXACT structure:
    - Each with one-line description
    - Length: 5-7 lines max
 
-4. **COMMENT 3** (Piglemaps pitch + Pglemaps DM magnet)
-   - Start by addressing the real pain point (planning Korea trip is hard)
-   - List 3-4 specific pain points as bullet points (which neighborhood, route, transport, booking order)
-   - Frame Pglemaps as a "must-have" tool that many foreign travelers in Korea already use
+4. **COMMENT 3** (Pglemaps social proof + DM magnet)
+   - Start by addressing the real pain point (planning Korea trip is hard/messy)
+   - List 3-4 specific pain points as bullet points
+     (which neighborhood to stay, how to connect spots, transport options, booking order)
+   - Frame Pglemaps as a must-have tool that many foreign travelers in Korea already use
    - Mention it's 100% free
    - DO NOT mention "no signup" or "no account needed" (signup IS required, don't lie)
    - End with: "Comment 'Pglemaps' below and I'll DM you the link 🗺️"
    - Length: 8-10 lines max
-   - Brand name MUST be "Pglemaps" (NOT "Piglemaps")
 
 [STYLE RULES]
 - Write in English (for English-speaking foreign travelers)
@@ -81,6 +82,9 @@ Generate a Threads post following this EXACT structure:
 - NO buzzwords like "amazing", "incredible", "must-see"
 - Direct, confident, Korean-style marketing tone
 - Real specific names, locations, prices (when known)
+- Brand name is ALWAYS "Pglemaps" (NOT "Piglemaps", NOT "PigleMaps")
+- DO NOT claim "no signup required" - signup IS required on Pglemaps
+- Frame Pglemaps as a must-have tool many foreign travelers in Korea already rely on
 
 [OUTPUT FORMAT]
 Return ONLY valid JSON in this exact format (no markdown, no extra text):
@@ -103,7 +107,7 @@ def get_client(api_key):
 def generate_threads_content(client, category, topic):
     """Claude API로 Threads 본문 + 댓글 3개 생성"""
     prompt = PROMPT_TEMPLATE.format(
-        piglemaps_context=PIGLEMAPS_CONTEXT,
+        pglemaps_context=PGLEMAPS_CONTEXT,
         category=category,
         topic=topic,
     )
