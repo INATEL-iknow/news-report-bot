@@ -1,212 +1,252 @@
 """
-Threads 콘텐츠 소재 뉴스 일일 발송 메인 실행 파일
-- 매일 한국시간 08:30 발동 (평일만)
-- 오늘의 토픽 결정 (23개 아이템 1:1 매칭)
-- Google News 수집 → Claude 어그로 점수 분석 → 메일 발송
+Threads 콘텐츠 소재 뉴스 - 메인 실행 파일 (최종 버전)
+- 매일 한국시간 08:30 발동
+- 진짜 뉴스 수집 → Claude 필터링 → 어그로 아이디어 생성 → 메일
 """
 
 from datetime import datetime
 
-from threads_news_topics import (
-    get_all_topics,
-    get_topic_config,
-    get_today_topic,
-)
-from threads_news_collector import fetch_today_topic_news
-from threads_news_analyzer import enrich_with_analysis
+from threads_news_collector import fetch_all_news
+from threads_news_filter import filter_news_with_claude, filter_by_category
+from threads_news_ideator import generate_ideas_from_news_pool
 import config
 from sender import send
 
 
-# 어그로 점수별 색상
-SCORE_COLORS = {
-    5: "#dc2626",   # 빨강
-    4: "#f59e0b",   # 주황
-    3: "#10b981",   # 초록
-    2: "#999",
-    1: "#999",
+CATEGORIES = {
+    "price_shock": {
+        "title": "가격/비용 충격",
+        "icon": "💰",
+        "color": "#dc2626",
+        "bg": "#fef2f2",
+    },
+    "scams": {
+        "title": "사기/바가지/함정",
+        "icon": "⚠️",
+        "color": "#f59e0b",
+        "bg": "#fffbeb",
+    },
+    "insider": {
+        "title": "한국인만 아는 정보",
+        "icon": "🤫",
+        "color": "#7c3aed",
+        "bg": "#faf5ff",
+    },
+    "regrets": {
+        "title": "외국인 후회/실수",
+        "icon": "😅",
+        "color": "#0891b2",
+        "bg": "#ecfeff",
+    },
+    "deals": {
+        "title": "시간 한정 혜택/특별",
+        "icon": "🎁",
+        "color": "#16a34a",
+        "bg": "#f0fdf4",
+    },
 }
 
-SCORE_LABELS = {
-    5: "🔥 완벽한 재료",
-    4: "💪 강력한 재료",
-    3: "✅ 괜찮은 재료",
-    2: "⚪ 약함",
-    1: "⚪ 약함",
-}
 
-USE_RECOMMENDATION_COLORS = {
-    "Use Today": "#dc2626",
-    "Use This Week": "#f59e0b",
-    "Save for Later": "#3b82f6",
-    "Skip": "#999",
-}
-
-
-def render_email(topic, articles):
-    """이메일 HTML 렌더링"""
+def render_news_card(news, cfg):
+    """개별 뉴스 카드 렌더링"""
+    evaluation = news.get("evaluation", {})
+    idea = news.get("idea", {})
     
+    score = evaluation.get("score", 0)
+    key_fact = evaluation.get("key_fact", "")
+    
+    idea_en = idea.get("idea_en", "")
+    idea_kr = idea.get("idea_kr", "")
+    facts_used = idea.get("facts_used", "")
+    
+    lang_flag = "🇰🇷" if news.get("lang") == "ko" else "🇺🇸"
+    
+    return f"""
+    <div style="margin:10px 0;padding:14px;background:#fff;border-radius:8px;
+                border-left:4px solid {cfg['color']};">
+      
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+        <span style="background:{cfg['color']};color:#fff;padding:2px 8px;
+                     border-radius:10px;font-size:11px;font-weight:600;">
+          ⭐ 점수 {score}/5
+        </span>
+        <span style="background:#e5e7eb;color:#666;padding:2px 8px;
+                     border-radius:10px;font-size:11px;">
+          {lang_flag} {news.get('source','')}
+        </span>
+      </div>
+      
+      <div style="font-size:12px;color:#555;margin:6px 0;font-weight:600;">
+        📰 원본 기사
+      </div>
+      <div style="font-size:13px;color:#1a1a1a;margin:4px 0 8px 0;">
+        <a href="{news.get('link','')}" style="color:#1a1a1a;text-decoration:none;">
+          {news.get('title','')}
+        </a>
+      </div>
+      
+      <div style="margin:10px 0;padding:10px;background:#fff8dc;border-radius:6px;
+                  border-left:3px solid #f59e0b;">
+        <div style="font-size:11px;color:#92400e;font-weight:600;margin-bottom:4px;">
+          💡 어그로 아이디어 (영문)
+        </div>
+        <div style="font-size:14px;color:#1a1a1a;line-height:1.5;">
+          {idea_en}
+        </div>
+      </div>
+      
+      <div style="margin:8px 0;padding:10px;background:#eff6ff;border-radius:6px;
+                  border-left:3px solid #3b82f6;">
+        <div style="font-size:11px;color:#1e40af;font-weight:600;margin-bottom:4px;">
+          🇰🇷 한글 번역
+        </div>
+        <div style="font-size:14px;color:#1a1a1a;line-height:1.5;">
+          {idea_kr}
+        </div>
+      </div>
+      
+      <div style="margin-top:8px;padding:8px;background:#f0fdf4;border-radius:4px;
+                  font-size:11px;color:#15803d;">
+        <b>📌 사용한 사실:</b> {facts_used}
+      </div>
+    </div>
+    """
+
+
+def render_category(key, news_list):
+    """카테고리 카드 렌더링"""
+    cfg = CATEGORIES.get(key, {})
+    
+    if not news_list:
+        return f"""
+        <div style="margin:20px 0;padding:16px;background:#f9fafb;border-radius:8px;
+                    border:1px dashed #d1d5db;">
+          <h3 style="margin:0 0 8px 0;color:#9ca3af;">
+            {cfg['icon']} {cfg['title']}
+          </h3>
+          <p style="font-size:13px;color:#9ca3af;margin:0;">
+            오늘은 검증된 뉴스가 없어요
+          </p>
+        </div>
+        """
+    
+    news_html = ""
+    for news in news_list:
+        news_html += render_news_card(news, cfg)
+    
+    return f"""
+    <div style="margin:20px 0;padding:16px;background:{cfg['bg']};border-radius:8px;">
+      <h3 style="margin:0 0 12px 0;color:{cfg['color']};">
+        {cfg['icon']} {cfg['title']} ({len(news_list)}건)
+      </h3>
+      {news_html}
+    </div>
+    """
+
+
+def render_email(news_by_category, total_collected, total_filtered):
+    """이메일 HTML"""
     today = datetime.now().strftime("%Y-%m-%d (%a)")
     weekday_kr = ["월", "화", "수", "목", "금", "토", "일"][datetime.now().weekday()]
     
-    config_data = get_topic_config(topic)
-    icon = config_data.get("icon", "📰")
-    color = config_data.get("color", "#333")
-    category = config_data.get("category", "")
+    # 5개 카테고리 카드
+    sections = []
+    category_order = ["price_shock", "scams", "insider", "regrets", "deals"]
+    for key in category_order:
+        news_list = news_by_category.get(key, [])
+        sections.append(render_category(key, news_list))
     
-    # 기사 카드 HTML 생성
-    article_cards = []
-    for i, article in enumerate(articles, 1):
-        analysis = article.get("analysis", {})
-        score = analysis.get("agro_score", 0)
-        score_color = SCORE_COLORS.get(score, "#999")
-        score_label = SCORE_LABELS.get(score, "")
-        agro_type = analysis.get("agro_type", "")
-        key_hook = analysis.get("key_hook", "")
-        content_idea = analysis.get("content_idea", "")
-        use_rec = analysis.get("use_recommendation", "")
-        use_rec_color = USE_RECOMMENDATION_COLORS.get(use_rec, "#999")
-        
-        lang_flag = "🇰🇷" if article.get("lang") == "ko" else "🇺🇸"
-        
-        card = f"""
-        <div style="margin:16px 0;padding:14px;border-left:4px solid {score_color};
-                    background:#fafafa;border-radius:6px;">
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-            <span style="background:{score_color};color:#fff;padding:3px 10px;
-                         border-radius:12px;font-size:11px;font-weight:600;">
-              {score_label} ({score}/5)
-            </span>
-            <span style="background:#e5e7eb;color:#333;padding:3px 10px;
-                         border-radius:12px;font-size:11px;font-weight:600;">
-              {agro_type}
-            </span>
-            <span style="background:{use_rec_color};color:#fff;padding:3px 10px;
-                         border-radius:12px;font-size:11px;font-weight:600;">
-              {use_rec}
-            </span>
-          </div>
-          
-          <div style="font-size:11px;color:#888;margin-top:8px;">
-            {lang_flag} {article.get('source','')}
-          </div>
-          
-          <div style="font-weight:600;font-size:14px;margin:4px 0;">
-            <a href="{article.get('link','')}" 
-               style="color:#1a1a1a;text-decoration:none;">{article.get('title','')}</a>
-          </div>
-          
-          <div style="font-size:12px;color:#666;line-height:1.5;margin:6px 0;">
-            {article.get('summary','')[:200]}
-          </div>
-          
-          <div style="margin-top:10px;padding:10px;background:#fff5f0;
-                      border-radius:4px;border-left:3px solid #f59e0b;">
-            <div style="font-size:12px;font-weight:600;color:#92400e;margin-bottom:4px;">
-              💡 어그로 후킹
-            </div>
-            <div style="font-size:13px;color:#333;font-style:italic;">
-              "{key_hook}"
-            </div>
-          </div>
-          
-          <div style="margin-top:8px;padding:10px;background:#eff6ff;
-                      border-radius:4px;border-left:3px solid #3b82f6;">
-            <div style="font-size:12px;font-weight:600;color:#1e40af;margin-bottom:4px;">
-              📝 콘텐츠 아이디어
-            </div>
-            <div style="font-size:13px;color:#333;line-height:1.5;">
-              {content_idea}
-            </div>
-          </div>
-        </div>
-        """
-        article_cards.append(card)
+    sections_html = "\n".join(sections)
     
-    articles_html = "\n".join(article_cards) if article_cards else """
-        <div style="padding:20px;background:#fef2f2;border-radius:8px;text-align:center;">
-          <p style="color:#991b1b;margin:0;">
-            오늘 토픽에 대한 어그로 점수 3+ 기사가 없습니다.<br>
-            <small>키워드 조정이 필요하거나, 다른 토픽으로 콘텐츠를 만드는 것이 좋습니다.</small>
-          </p>
-        </div>
-    """
+    # 총 카운트
+    total_ideas = sum(len(v) for v in news_by_category.values())
     
     html = f"""<!doctype html>
 <html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-                   max-width:700px;margin:0 auto;padding:16px;color:#222;background:#fff;">
+                   max-width:680px;margin:0 auto;padding:16px;color:#222;background:#fff;">
 
-  <h2 style="border-bottom:3px solid {color};padding-bottom:12px;">
-    {icon} 오늘의 Threads 콘텐츠 소재
+  <h2 style="border-bottom:3px solid #1a1a1a;padding-bottom:12px;">
+    💡 오늘의 Threads 콘텐츠 아이디어
   </h2>
   
   <p style="color:#666;font-size:13px;">
-    {today} ({weekday_kr}요일) · 오늘의 토픽: <b style="color:{color};">{topic}</b><br>
-    📂 카테고리: {category}
+    {today} ({weekday_kr}요일) · 진짜 뉴스 기반 검증된 아이디어<br>
+    🕙 콘텐츠 작성: 오후 9:30 메일 또는 직접 작성
   </p>
   
-  <div style="background:#fffbeb;border-left:4px solid #f59e0b;
+  <div style="background:#f3f4f6;padding:12px;margin:16px 0;border-radius:8px;
+              display:flex;gap:10px;justify-content:space-around;text-align:center;">
+    <div>
+      <div style="font-size:20px;font-weight:bold;color:#3b82f6;">{total_collected}</div>
+      <div style="font-size:11px;color:#666;">수집된 뉴스</div>
+    </div>
+    <div>
+      <div style="font-size:20px;font-weight:bold;color:#f59e0b;">{total_filtered}</div>
+      <div style="font-size:11px;color:#666;">필터 통과 (4+점)</div>
+    </div>
+    <div>
+      <div style="font-size:20px;font-weight:bold;color:#16a34a;">{total_ideas}</div>
+      <div style="font-size:11px;color:#666;">검증된 아이디어</div>
+    </div>
+  </div>
+  
+  <div style="background:#eff6ff;border-left:4px solid #3b82f6;
               padding:12px;margin:16px 0;border-radius:4px;font-size:13px;">
     <b>💡 사용 방법:</b><br>
-    어그로 점수 4~5점 기사 중에서 가장 끌리는 1건 선택 →<br>
-    오후 9:30 자동 메일이 와도 좋고, 이 기사로 직접 콘텐츠 만들어도 OK.
+    모든 아이디어는 <b>진짜 뉴스 기사 기반</b>입니다.<br>
+    1. 원하는 아이디어 선택<br>
+    2. 원본 기사 링크 클릭해서 사실 확인<br>
+    3. 본인 콘텐츠 공식으로 작성 (어그로 + Open Loop + Pglemaps)
   </div>
 
-  <h3 style="margin-top:24px;color:#1a1a1a;">
-    📰 분석된 기사 ({len(articles)}건)
-  </h3>
-  
-  {articles_html}
+  {sections_html}
 
   <p style="color:#999;font-size:11px;margin-top:32px;text-align:center;">
-    Claude AI 자동 분석 · 매일 오전 8시 30분 발송 (평일만)
+    Google News + Claude AI · 매일 오전 8시 30분 발송
   </p>
 
 </body></html>"""
     
-    subject = f"[{datetime.now():%m/%d}] 오늘의 Threads 소재 - {topic} ({len(articles)}건)"
+    subject = f"[{datetime.now():%m/%d}] 오늘의 Threads 아이디어 ({total_ideas}건 검증)"
     return subject, html
 
 
 def main():
-    print("🚀 Threads 콘텐츠 소재 뉴스 수집 시작")
+    print("🚀 Threads 콘텐츠 아이디어 시스템 시작")
     
-    # 1. 오늘의 토픽 결정
-    topic = get_today_topic()
-    if not topic:
-        print("⏸️ 주말 - 발송 안 함")
+    # 1. 뉴스 수집
+    news_items = fetch_all_news()
+    total_collected = len(news_items)
+    
+    if not news_items:
+        print("❌ 수집된 뉴스 없음")
         return
     
-    print(f"📌 오늘의 토픽: {topic}")
-    
-    # 2. Google News에서 뉴스 수집
-    articles = fetch_today_topic_news(topic)
-    
-    if not articles:
-        print("❌ 수집된 기사 없음")
-        # 빈 메일이라도 발송 (키워드 점검 필요 알림)
-        subject, html = render_email(topic, [])
-        send(subject, html, config)
+    # 2. Claude로 필터링 (4점 이상만)
+    if not config.ANTHROPIC_API_KEY:
+        print("❌ ANTHROPIC_API_KEY 없음")
         return
     
-    # 3. Claude로 어그로 점수 분석 + 필터링
-    if config.ANTHROPIC_API_KEY:
-        articles = enrich_with_analysis(
-            config.ANTHROPIC_API_KEY,
-            topic,
-            articles,
-            min_score=3,
-        )
-    else:
-        print("⚠️ ANTHROPIC_API_KEY 없음 - 분석 생략")
+    filtered = filter_news_with_claude(
+        config.ANTHROPIC_API_KEY,
+        news_items,
+        min_score=4,
+    )
+    total_filtered = len(filtered)
     
-    # 상위 15건만 메일에 포함
-    articles = articles[:15]
+    # 3. 카테고리별 그룹화 (각 최대 2건)
+    news_by_category = filter_by_category(filtered)
     
-    # 4. 이메일 렌더링 + 발송
-    subject, html = render_email(topic, articles)
+    # 4. 검증된 뉴스로 아이디어 생성
+    news_by_category = generate_ideas_from_news_pool(
+        config.ANTHROPIC_API_KEY,
+        news_by_category,
+    )
+    
+    # 5. 메일 발송
+    subject, html = render_email(news_by_category, total_collected, total_filtered)
     send(subject, html, config)
-    print(f"✅ 발송 완료 - {len(articles)}건")
+    print("✅ 발송 완료")
 
 
 if __name__ == "__main__":
