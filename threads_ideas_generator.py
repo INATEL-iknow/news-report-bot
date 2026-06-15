@@ -1,7 +1,7 @@
 """
 Threads 콘텐츠 아이디어 생성기
 - 매일 Claude가 5개 카테고리 × 각 2개 = 10개 새 주제 생성
-- 방한 외국인이 흥미로워할 토픽 위주
+- 각 아이디어마다 검색용 키워드도 함께 생성 (검증용)
 """
 
 import json
@@ -16,66 +16,51 @@ Each idea should be something foreign travelers visiting Korea would find genuin
 [CATEGORIES - generate 2 ideas per category]
 
 1. 💰 Price/Cost Shock
-   - Things shockingly cheap or expensive in Korea
-   - Korea vs US/Europe price comparisons
-   - Hidden cost discoveries
-   - Examples: "Korea botox is 1/5 of US price", "Why glasses in Korea are so cheap"
+   Examples: "Korea botox is 1/5 of US price", "Why glasses in Korea are so cheap"
 
 2. ⚠️ Scams/Tourist Traps
-   - Things foreigners get ripped off on
-   - Hidden fees, tourist-only pricing
-   - Common scam patterns
-   - Examples: "Airport taxi scam in Korea", "Myeongdong tourist traps"
+   Examples: "Airport taxi scam in Korea", "Myeongdong tourist traps"
 
 3. 🤫 Insider Info (Things Koreans Don't Tell Foreigners)
-   - Local secrets, hidden spots
-   - Where Koreans actually go vs tourist spots
-   - Insider tricks
-   - Examples: "Where Koreans get K-beauty", "Real BBQ spots Koreans love"
+   Examples: "Where Koreans get K-beauty", "Real BBQ spots Koreans love"
 
 4. 😅 Regrets/Mistakes
-   - What foreigners regret doing in Korea
-   - Common first-day mistakes
-   - Things foreigners wish they knew
-   - Examples: "Why foreigners regret Myeongdong day 1", "K-beauty products foreigners wrongly buy"
+   Examples: "Why foreigners regret Myeongdong day 1", "K-beauty products foreigners wrongly buy"
 
 5. 🎁 Limited-Time Deals/Special Offers
-   - Foreigner-only discounts and free services
-   - Government promotions for tourists
-   - Seasonal special deals
-   - Examples: "Foreigner-only free Hanbok service", "KTX pass only foreigners can buy"
+   Examples: "Foreigner-only free Hanbok service", "KTX pass only foreigners can buy"
+
+[FOR EACH IDEA, PROVIDE]
+1. The provocative idea (1 English sentence)
+2. The Korean translation (1 Korean sentence)
+3. 2-3 search keywords to verify this fact (mix of English and Korean)
 
 [RULES]
-- Each idea must be SPECIFIC and intriguing (not generic)
-- Use NUMBERS, SPECIFIC PLACES, REAL TRENDS when possible
-- Each idea: ONE provocative sentence in English
-- Make foreigners think "Wait, really?" or "I need to know this"
-- Avoid clichés like "Top 10 things in Seoul"
-- NO fake statistics - use real Korean culture/business knowledge
+- Each idea must be SPECIFIC (mention numbers, places, brands)
+- Make foreigners think "Wait, really?"
+- Avoid clichés
+- NO obviously fake statistics
+- Search keywords should target REAL articles that could verify the claim
 
 [OUTPUT FORMAT]
 Return ONLY valid JSON (no markdown, no extra text):
 {
   "price_shock": [
-    "idea 1 (one provocative sentence)",
-    "idea 2"
+    {
+      "idea_en": "English idea sentence",
+      "idea_kr": "한국어 번역",
+      "search_keywords": ["keyword 1", "keyword 2"]
+    },
+    {
+      "idea_en": "...",
+      "idea_kr": "...",
+      "search_keywords": ["...", "..."]
+    }
   ],
-  "scams": [
-    "idea 1",
-    "idea 2"
-  ],
-  "insider": [
-    "idea 1",
-    "idea 2"
-  ],
-  "regrets": [
-    "idea 1",
-    "idea 2"
-  ],
-  "deals": [
-    "idea 1",
-    "idea 2"
-  ]
+  "scams": [...],
+  "insider": [...],
+  "regrets": [...],
+  "deals": [...]
 }
 """
 
@@ -85,11 +70,11 @@ def get_client(api_key):
 
 
 def generate_ideas(client):
-    """매일 새 10개 주제 생성"""
+    """매일 새 10개 주제 + 검색 키워드 생성"""
     try:
         msg = client.messages.create(
             model="claude-opus-4-7",
-            max_tokens=2000,
+            max_tokens=3500,
             messages=[{"role": "user", "content": PROMPT}],
         )
         text = msg.content[0].text.strip()
