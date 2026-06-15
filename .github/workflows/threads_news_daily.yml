@@ -1,0 +1,28 @@
+name: Daily Threads News Source
+
+on:
+  workflow_dispatch:
+
+jobs:
+  send-threads-news:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 라이브러리 설치
+        run: |
+          pip install feedparser python-dateutil anthropic
+
+      - name: Threads 뉴스 수집 + 분석 + 발송
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python threads_news_main.py
