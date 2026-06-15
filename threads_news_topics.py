@@ -208,21 +208,6 @@ TOPICS = {
         ],
     },
     
-    # 🎭 Tours & Tickets
-    "Show Tickets": {
-        "icon": "🎫",
-        "color": "#10b981",
-        "category": "Tours & Tickets",
-        "keywords": [
-            "Korea show ticket foreigner discount",
-            "Seoul Nanta show worth it",
-            "Korea performance ticket scam",
-            "Seoul show foreigner price",
-            "Korea show ticket cheaper",
-            "외국인 한국 공연 할인",
-            "한국 공연 외국인 가격",
-        ],
-    },
     "Museum": {
         "icon": "🏛️",
         "color": "#10b981",
