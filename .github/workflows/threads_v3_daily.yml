@@ -1,0 +1,28 @@
+name: Daily Threads V3 Content
+
+on:
+  workflow_dispatch:
+
+jobs:
+  send-threads-v3:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 라이브러리 설치
+        run: |
+          pip install anthropic
+
+      - name: Threads V3 콘텐츠 생성 + 발송
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python threads_v3_main.py
