@@ -1,71 +1,56 @@
-from bs4 import BeautifulSoup
+"""
+데이터 처리기 - 카테고리별 그룹화 + 중복 제거
+"""
+
 from difflib import SequenceMatcher
 
-def clean_html(text: str, limit: int = 180) -> str:
-    soup = BeautifulSoup(text or "", "html.parser")
-    txt = soup.get_text(" ", strip=True)
-    return (txt[:limit] + "…") if len(txt) > limit else txt
 
-def similar(a: str, b: str) -> float:
+def similar(a, b):
+    """제목 유사도 (0~1)"""
     return SequenceMatcher(None, a, b).ratio()
 
-def dedupe(items, threshold: float = 0.65):
+
+def dedupe(items, threshold=0.7):
+    """중복 기사 제거 (제목 유사도 기준)"""
     kept = []
-    for it in items:
-        if any(similar(it["title"], k["title"]) >= threshold for k in kept):
-            continue
-        kept.append(it)
+    for item in items:
+        is_dup = False
+        for k in kept:
+            if similar(item["title"], k["title"]) >= threshold:
+                is_dup = True
+                break
+        if not is_dup:
+            kept.append(item)
     return kept
 
-def score(item, keywords):
-    s = 0
-    title = item["title"]
-    summary = item.get("summary") or ""
-    for kw in keywords:
-        if kw in title:
-            s += 3
-        elif kw in summary:
-            s += 1
-    if item.get("published"):
-        s += 1
-    if len(summary) > 200:
-        s += 2
-    return s
 
-def is_blocked(item, block_keywords, spam_phrases):
-    title = item["title"]
-    summary = item.get("summary") or ""
-    if any(kw in title for kw in block_keywords):
-        return True
-    if any(kw in summary[:100] for kw in block_keywords):
-        return True
-    if any(phrase in title for phrase in spam_phrases):
-        return True
-    return False
+def group_by_category(items):
+    """카테고리별 그룹화"""
+    groups = {
+        "betalist": [],
+        "monetize": [],
+    }
+    
+    for item in items:
+        cat = item.get("category", "")
+        if cat in groups:
+            groups[cat].append(item)
+    
+    return groups
 
-def is_too_short(item, min_length):
-    summary = (item.get("summary") or "").strip()
-    return len(summary) < min_length
 
-def curate_by_category(items, keywords, block_keywords, spam_phrases, 
-                       min_length, dedupe_threshold, quota):
-    items = [it for it in items if not is_blocked(it, block_keywords, spam_phrases)]
-    items = [it for it in items if not is_too_short(it, min_length)]
+def process(items):
+    """전체 처리 흐름"""
+    print("🔧 데이터 처리 중...")
     
-    for it in items:
-        it["summary"] = clean_html(it.get("summary", ""))
-        it["_score"] = score(it, keywords)
+    # 중복 제거
+    items = dedupe(items, threshold=0.7)
+    print(f"  중복 제거 후: {len(items)}건")
     
-    by_cat = {cat: [] for cat in quota.keys()}
-    for it in items:
-        cat = it.get("category")
-        if cat in by_cat:
-            by_cat[cat].append(it)
+    # 카테고리별 그룹화
+    grouped = group_by_category(items)
     
-    result = {}
-    for cat, cat_items in by_cat.items():
-        cat_items.sort(key=lambda x: (x["_score"], x.get("published") or 0), reverse=True)
-        cat_items = dedupe(cat_items, dedupe_threshold)
-        result[cat] = cat_items[:quota[cat]]
+    for cat, cat_items in grouped.items():
+        print(f"  {cat}: {len(cat_items)}건")
     
-    return result
+    return grouped
