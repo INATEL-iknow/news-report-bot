@@ -1,8 +1,20 @@
 """
-데이터 처리기 - 카테고리별 그룹화 + 중복 제거
+데이터 처리기 - 7개 카테고리 그룹화 + 중복 제거
 """
 
 from difflib import SequenceMatcher
+
+
+# 7개 카테고리 정의
+CATEGORIES = [
+    "betalist",            # BetaList 신규 서비스
+    "monetize",            # 수익화 아이디어
+    "inbound_tourism",     # 방한 외국인 트렌드
+    "gov_policy",          # 정부 정책/지원금
+    "tourism_industry",    # 한국 관광 업계 동향
+    "affiliate",           # 어필리에이트 사례
+    "foreigner_business",  # 외국인 대상 한국 비즈니스
+]
 
 
 def similar(a, b):
@@ -26,10 +38,7 @@ def dedupe(items, threshold=0.7):
 
 def group_by_category(items):
     """카테고리별 그룹화"""
-    groups = {
-        "betalist": [],
-        "monetize": [],
-    }
+    groups = {cat: [] for cat in CATEGORIES}
     
     for item in items:
         cat = item.get("category", "")
@@ -50,7 +59,9 @@ def process(items):
     # 카테고리별 그룹화
     grouped = group_by_category(items)
     
-    for cat, cat_items in grouped.items():
-        print(f"  {cat}: {len(cat_items)}건")
+    print(f"\n[카테고리별 수집 결과]")
+    for cat in CATEGORIES:
+        count = len(grouped.get(cat, []))
+        print(f"  {cat}: {count}건")
     
     return grouped
