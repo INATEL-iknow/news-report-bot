@@ -1,18 +1,17 @@
 """
-Threads V3 콘텐츠 생성기 (V3 정의서 완전 반영)
-- V3 정의서 14개 메타데이터 모두 활용
-- 4단 구조 (본문 + 댓글 1/2/3)
-- 카톡 친구 톤 (Level 3)
-- 브랜드명 비공개 + 키워드 매그넷
+Threads V3 콘텐츠 생성기 (피드백 반영 V2)
+- 톤 일관성 강제 (본문/댓글 모두 같은 친구 톤)
+- 필러 단어 금지 ("자", "Cute", "Love that for you" 등)
+- 기승전결 구조 강제
+- 피글맵 진짜 기능만 사용
 - 영문 + 한글 동시 생성
-- 이모지 절대 금지
 """
 
 import json
 import time
 from anthropic import Anthropic
 
-from threads_v3_topics import get_topic_config, get_post_type_info
+from threads_v3_topics import get_topic_config, get_post_type_info, PGLEMAPS_REAL_FEATURES
 
 
 PROMPT_TEMPLATE = """You are a Korean local writing Threads posts for foreign travelers visiting Korea.
@@ -20,92 +19,117 @@ PROMPT_TEMPLATE = """You are a Korean local writing Threads posts for foreign tr
 [TOPIC METADATA]
 Keyword: {keyword}
 Category: {category_name}
-Target Traveler: {target_traveler}
+Target: {target_traveler}
 
-What they already know: {what_foreigners_already_know}
-What they don't know: {what_foreigners_do_not_know}
+What they already know: {what_already_know}
+What they don't know: {what_dont_know}
 
 Main Hook: {main_hook}
 Post Type: {post_type_name} - {post_type_description}
 
-[CONTENT BLUEPRINT]
+[CONTENT BLUEPRINT - use as guide, write in your own voice]
 Comment 1 answer: {comment_1_answer}
 Comment 2 real tip: {comment_2_real_tip}
-Comment 3 Pglemaps benefit: {comment_3_pglemaps_benefit}
+Comment 3 Pglemaps benefit: {comment_3_real_feature}
 
-[FORBIDDEN CLAIMS - DO NOT WRITE]
+[PGLEMAPS REAL FEATURES - ONLY USE THESE]
+{real_features}
+
+[ABSOLUTELY FORBIDDEN CLAIMS - DO NOT WRITE THESE]
 {forbidden_claims}
 
-[YOUR TASK]
-Create a complete Threads post (main + 3 comments) following the V3 structure.
-Use the blueprint above but write in YOUR voice, not copy-paste it.
+============================================================
+TONE REQUIREMENTS (CRITICAL)
+============================================================
 
-[TONE - CRITICAL]
 Write like you're texting a friend who's planning a Korea trip.
-- Casual, conversational, slightly humorous
+The SAME tone must run through main post and ALL 3 comments.
+
+DO use:
+- Conversational casual English
 - Short choppy sentences
-- Use "you" directly (never "tourists" or "foreigners")
-- Natural expressions: "Okay so", "Here's the deal", "It's a whole thing", "Btw", "Drop", "Like", "Actually"
-- Light humor or mild sass when fitting
-- No emojis at all
-- No formal phrases like "It is important to note that..."
+- "you" directly
+- Light natural humor when fitting
+- Phrases like "Here's the deal", "Btw", "Honestly", "The thing is"
+- "Trust me", "Save this", "You'll thank me later"
 
-[STRUCTURE - V3 RULES]
+DO NOT use:
+- "Cute. Love that for you." - sounds mocking, NEVER use this
+- "Spoiler:" - filler word, never use
+- "자," - meaningless Korean filler
+- "Sorry not sorry" - cliché
+- Any condescending tone
+- Sarcastic put-downs
+- Emojis (zero, ever)
+- Formal phrases like "It is important to note"
+- "tourists" or "foreigners" - use "you" or "everyone"
+- Sudden tone shifts between main post and comments
+- Buzzwords like "literally", "actually" used as fillers
 
-MAIN POST:
-- Strong hook that breaks expectations or creates curiosity
-- DO NOT reveal the answer in main post
-- Make people NEED to read comment 1
-- 5-8 short lines, choppy rhythm
-- End with something that triggers "wait what?" or "ugh I'm doing this"
-- Add [Topic: Korea Travel] at the end
-- Reader should feel: "Why?", "I'm doing this", "I almost did this", "I need to see comments"
+CONSISTENCY CHECK:
+After writing, the main post and all 3 comments should sound like
+the same person continuing one conversation. Not like they were
+written by 4 different people.
 
-COMMENT 1:
-- Resolve the curiosity from main post
-- Explain WHY using the comment_1_answer blueprint
-- Make reader think "ah, that's why"
-- 5-7 lines, still casual
+============================================================
+STRUCTURE REQUIREMENTS
+============================================================
+
+MAIN POST (must follow 기승전결 / setup-build-twist-hook):
+1. SETUP (1-2 lines): State the situation directly
+2. BUILD (2-3 lines): Add context, raise the stakes
+3. TWIST (1-2 lines): Reveal there's a hidden problem
+4. HOOK (1 line): Make them HAVE to read comment 1
+
+Example structure (for HOTEL topic):
+"Booking Myeongdong for your Seoul trip?           [SETUP]
+Most people do. It's central, it's popular,
+travel guides love it.                              [BUILD]
+But popular and 'right for your trip' aren't       [TWIST]
+the same thing.
+Here's why this matters more than you think."       [HOOK]
+
+End with: [Topic: Korea Travel]
+
+COMMENT 1 (resolve curiosity):
+- Open with continuity from main post
+- Explain the actual WHY using the comment_1_answer blueprint
+- 5-7 lines, same casual tone as main post
 - End in a way that leads to comment 2
 
-COMMENT 2:
-- Practical advice with SAVE VALUE
-- Use the comment_2_real_tip blueprint
-- Could be a cheat sheet, comparison, or actionable tip
-- Format as list/bullets if helpful (use dashes, NOT emojis)
-- Make reader want to bookmark this
-- End with: "Save this", "Trust me", "You'll thank me later" or similar
+COMMENT 2 (save-worthy info):
+- Open with practical pivot ("Here's what works:", "The fix:", "Try this:")
+- Format as clean bullet list using dashes (-), never emojis
+- Use comment_2_real_tip blueprint
+- End with: "Save this", "Trust me", "You'll thank me later"
 
-COMMENT 3 (CRITICAL RULES):
-- Connect to the problem from main/comment 1/2
-- Frame manual solution as annoying (random screenshots, switching apps, scattered lists)
-- Introduce Pglemaps benefit WITHOUT mentioning the brand name
+COMMENT 3 (Pglemaps + magnet):
+- Open by acknowledging the problem from main/comment 1/2
+- Frame manual solution as annoying (random screenshots, scattered lists, etc.)
+- Introduce Pglemaps benefit WITHOUT brand name
 - Use phrases like:
-  * "There's this free Korea trip planner"
-  * "There's a free website that lets you..."
-  * "There's a free map-based planner for Korea travelers"
-- Use the comment_3_pglemaps_benefit blueprint
-- End with: 'Drop "{keyword}" below and I'll send it' OR similar variant
-  (Other variants: 'Comment "{keyword}" and I\\'ll DM you', 'Drop "{keyword}" - link in DM')
+  * "There's a free Korea trip planner that lets you..."
+  * "There's a free website where you can..."
+  * "There's a free map-based planner for Korea travelers..."
+- Use the comment_3_real_feature blueprint
+- End with magnet: 'Drop "{keyword}" below and I\\'ll send it'
 
-[ABSOLUTE FORBIDDEN]
-- DO NOT mention "Pglemaps", "Pgle Maps", "pglemaps.com" anywhere
-- DO NOT use ANY emojis (no exceptions)
-- DO NOT use "tourists" or "foreigners" - use "you", "everyone", "people"
-- DO NOT use fake statistics or made-up numbers
-- DO NOT say "no signup needed" (signup IS required)
-- DO NOT make claims listed in [FORBIDDEN CLAIMS] above
-- DO NOT use formal/blog-style writing
+============================================================
+KOREAN TRANSLATION (구어체)
+============================================================
 
-[KOREAN TRANSLATION]
-Provide Korean translation in casual conversational tone:
 - Use "~예요/이에요" not "~합니다"
 - Short choppy sentences like Korean group chat
-- Natural fillers: "자", "이거", "진짜", "제발", "참", "솔직히", "근데"
+- Natural fillers OK: "솔직히", "근데", "이거", "진짜", "참"
+- NEVER use "자," at the start of sentences (sounds weird)
+- NEVER use Korean equivalents of "Cute" or "Love that for you"
 - No emojis
-- Match the casual energy of English version
+- Match the casual energy of English
 
-[OUTPUT - VALID JSON ONLY]
+============================================================
+OUTPUT - VALID JSON ONLY
+============================================================
+
 {{
   "main_post_en": "main post in English with [Topic: Korea Travel] at end",
   "comment_1_en": "comment 1 in English",
@@ -134,7 +158,6 @@ def generate_content(client, keyword):
     post_type = config.get("post_type", "controversial")
     post_type_info = get_post_type_info(post_type)
     
-    # forbidden_claims 리스트를 줄바꿈 텍스트로
     forbidden_list = config.get("forbidden_claims", [])
     forbidden_text = "\n".join(f"- {claim}" for claim in forbidden_list)
     if not forbidden_text:
@@ -144,14 +167,15 @@ def generate_content(client, keyword):
         keyword=keyword,
         category_name=config.get("category_name", ""),
         target_traveler=config.get("target_traveler", ""),
-        what_foreigners_already_know=config.get("what_foreigners_already_know", ""),
-        what_foreigners_do_not_know=config.get("what_foreigners_do_not_know", ""),
+        what_already_know=config.get("what_already_know", ""),
+        what_dont_know=config.get("what_dont_know", ""),
         main_hook=config.get("main_hook", ""),
         post_type_name=post_type_info.get("name_kr", post_type),
         post_type_description=post_type_info.get("description", ""),
         comment_1_answer=config.get("comment_1_answer", ""),
         comment_2_real_tip=config.get("comment_2_real_tip", ""),
-        comment_3_pglemaps_benefit=config.get("comment_3_pglemaps_benefit", ""),
+        comment_3_real_feature=config.get("comment_3_real_feature", ""),
+        real_features=PGLEMAPS_REAL_FEATURES,
         forbidden_claims=forbidden_text,
     )
     
@@ -179,13 +203,12 @@ def generate_content(client, keyword):
         
         content = json.loads(text)
         
-        # 메타데이터 추가
         content["keyword"] = keyword
         content["category_name"] = config.get("category_name", "")
         content["post_type"] = post_type
         content["post_type_kr"] = post_type_info.get("name_kr", "")
         
-        # 브랜드명 노출 검증 (안전장치)
+        # 브랜드명 노출 검증
         all_text = " ".join([
             content.get("main_post_en", ""),
             content.get("comment_1_en", ""),
@@ -196,7 +219,19 @@ def generate_content(client, keyword):
         forbidden_brands = ["pglemaps", "pgle maps", "pgle map", "pglemaps.com"]
         for brand in forbidden_brands:
             if brand in all_text:
-                content["brand_leak_warning"] = f"⚠️ '{brand}' 노출됨 - 검토 필요"
+                content["brand_leak_warning"] = f"'{brand}' 노출됨"
+                break
+        
+        # 필러 단어 검증 (피드백 반영)
+        forbidden_phrases = [
+            "cute. love that for you",
+            "love that for you",
+            "spoiler:",
+            "sorry not sorry",
+        ]
+        for phrase in forbidden_phrases:
+            if phrase in all_text:
+                content["filler_warning"] = f"필러 단어 '{phrase}' 감지됨"
                 break
         
         return content
@@ -215,6 +250,6 @@ def generate_multiple_contents(client, keywords):
         content = generate_content(client, keyword)
         if content:
             contents.append(content)
-        time.sleep(0.5)  # Rate limit 방지
+        time.sleep(0.5)
     
     return contents
