@@ -1,6 +1,7 @@
 """
-유튜브 쇼츠 대본 생성기 (2단계 파이프라인)
-- Step 1: Claude Haiku로 화제성 평가 + 상위 3개 선정
+유튜브 쇼츠 대본 생성기 (2단계 파이프라인 + 중복 방지)
+- Step 1: Claude Haiku로 화제성 평가 + key_subjects/issue_id 추출
+- Step 1.5: 국내 2 + 해외 1 고정 (중복 방지 + 유연 대체)
 - Step 2: Claude Opus로 심층 대본 생성 (자극적 + 공감 + 분쟁 CTA)
 """
 
@@ -9,7 +10,9 @@ import time
 from anthropic import Anthropic
 
 
+# ============================================================
 # Step 1: 화제성 평가 프롬프트 (Haiku - 빠르고 저렴)
+# ============================================================
 EVALUATION_PROMPT = """You are evaluating entertainment news for YouTube Shorts virality.
 
 [ARTICLE]
@@ -55,12 +58,14 @@ RULES for issue_id:
 - 예: "taylor-travis-wedding-2026"
 - 예: "bts-jungkook-lesserafim-shoutout-2026"
 - 같은 이슈에서 파생된 기사들은 반드시 같은 issue_id를 가져야 함
-- 예: "아이유 이종석 결별", "아이유 유인나 발언 재조명", "아이유 이종석 이상 신호" 
+- 예: "아이유 이종석 결별", "아이유 유인나 발언 재조명", "아이유 이종석 이상 신호"
      → 모두 "iu-lee-jongsuk-breakup-2026"
 """
 
 
+# ============================================================
 # Step 2: 대본 생성 프롬프트 (Opus - 고품질 콘텐츠)
+# ============================================================
 SCRIPT_GENERATION_PROMPT = """You are writing a viral YouTube Shorts script for a Korean entertainment news channel.
 
 [ISSUE INFO]
@@ -89,17 +94,17 @@ Total: 약 60초 (한국어 280-310자)
 1. 후킹 (3초, 약 15-25자):
    - 공감 유도 시작 ("다들 ~하죠?", "이거 상상 되세요?", "다들 놀란 표정 지으셨죠?")
    - 또는 강력한 팩트 (충격/의외성)
-   
+
 2. 본문 (40초, 약 180-210자):
    - 이슈 상세 설명
    - 중간중간 공감 포인트 삽입 ("이거 그대로 믿기엔 뭔가 이상하죠?", "다들 그냥 지나쳤는데")
    - 구체적 인용 or 세부사항 필수
    - 인물 이름, 날짜, 장소 등 팩트 강화
-   
+
 3. 반전/포인트 (10초, 약 45-55자):
    - 놀라운 추가 정보 or 의혹 제기
    - "근데 ~", "사실은 ~" 시작
-   
+
 4. CTA (7초, 약 30-40자):
    - 반드시 분쟁 유도 질문 (예/아니오 나뉘는)
    - 예시: "~ 진짜일까요, 아니면 ~일까요?"
@@ -151,10 +156,16 @@ Also write a 5-6 line factual summary in Korean of the actual article.
 """
 
 
+# ============================================================
+# 클라이언트 초기화
+# ============================================================
 def get_client(api_key):
     return Anthropic(api_key=api_key)
 
 
+# ============================================================
+# Step 1: 화제성 평가
+# ============================================================
 def evaluate_articles(client, items):
     """Step 1: 각 기사 화제성 평가 (Haiku 사용)"""
     print(f"🤖 Step 1: {len(items)}건 화제성 평가 중...")
@@ -174,7 +185,7 @@ def evaluate_articles(client, items):
         try:
             msg = client.messages.create(
                 model="claude-haiku-4-5-20251001",
-                max_tokens=400,
+                max_tokens=500,
                 messages=[{"role": "user", "content": prompt}],
             )
             text = msg.content[0].text.strip()
@@ -205,72 +216,157 @@ def evaluate_articles(client, items):
     return evaluated
 
 
-def select_top_3(evaluated_items):
-    """Step 1.5: 상위 3개 선정 (화제성 순, 국내/해외 균형)"""
-    print("\n🎯 상위 3개 선정 중...")
+# ============================================================
+# Step 1.5: 중복 판정 헬퍼 함수
+# ============================================================
+def _is_duplicate(item, selected_items):
+    """이슈 중복 판정
+    - issue_id가 같으면 중복
+    - 또는 key_subjects가 2개 이상 겹치면 중복
+    - 인물 1명뿐인데 그게 겹쳐도 중복
+    """
+    item_eval = item.get("evaluation", {})
+    item_issue_id = item_eval.get("issue_id", "").strip().lower()
+    item_subjects = set(
+        s.strip().lower() for s in item_eval.get("key_subjects", []) if s
+    )
     
-    # 점수순 정렬
-    evaluated_items.sort(
+    for selected in selected_items:
+        sel_eval = selected.get("evaluation", {})
+        sel_issue_id = sel_eval.get("issue_id", "").strip().lower()
+        sel_subjects = set(
+            s.strip().lower() for s in sel_eval.get("key_subjects", []) if s
+        )
+        
+        # 룰 1: issue_id 완전 일치 = 중복
+        if item_issue_id and sel_issue_id and item_issue_id == sel_issue_id:
+            return True
+        
+        # 룰 2: 핵심 인물 2명 이상 겹치면 중복
+        overlap = item_subjects & sel_subjects
+        if len(overlap) >= 2:
+            return True
+        
+        # 룰 3: 인물이 1명뿐인데 그게 겹치면 중복
+        if len(item_subjects) == 1 and len(sel_subjects) == 1 and overlap:
+            return True
+    
+    return False
+
+
+def _pick_from_pool(pool, selected_items, count, min_score=5):
+    """풀에서 중복 안 되게 상위 N개 선정"""
+    picked = []
+    for item in pool:
+        if len(picked) >= count:
+            break
+        
+        # 최소 화제성 컷
+        score = item.get("evaluation", {}).get("virality_score", 0)
+        if score < min_score:
+            continue
+        
+        # 이미 선정된 것과 중복 체크
+        if _is_duplicate(item, selected_items + picked):
+            continue
+        
+        picked.append(item)
+    
+    return picked
+
+
+# ============================================================
+# Step 1.5: 상위 3개 선정 (국내 2 + 해외 1 고정 + 유연 대체)
+# ============================================================
+def select_top_3(evaluated_items):
+    """Step 1.5: 국내 2 + 해외 1 고정 (중복 방지 + 유연 대체)
+    
+    로직:
+    1. 국내/해외 각자 화제성 순 정렬
+    2. 국내 2개 선정 (중복 없이)
+    3. 해외 1개 선정 (화제성 6점 이상, 중복 없이)
+    4. 해외 약하면 국내 3번째로 대체
+    """
+    print("\n🎯 상위 3개 선정 중 (국내 2 + 해외 1 목표)...")
+    
+    # 국내/해외 분리 + 각자 정렬
+    domestic_pool = sorted(
+        [i for i in evaluated_items 
+         if i.get("evaluation", {}).get("category") == "domestic"],
+        key=lambda x: x.get("evaluation", {}).get("virality_score", 0),
+        reverse=True,
+    )
+    global_pool = sorted(
+        [i for i in evaluated_items 
+         if i.get("evaluation", {}).get("category") == "global"],
         key=lambda x: x.get("evaluation", {}).get("virality_score", 0),
         reverse=True,
     )
     
-    # 국내/해외 분리
-    domestic = [i for i in evaluated_items 
-                if i.get("evaluation", {}).get("category") == "domestic"]
-    global_items = [i for i in evaluated_items 
-                    if i.get("evaluation", {}).get("category") == "global"]
+    print(f"  국내 풀: {len(domestic_pool)}건 / 해외 풀: {len(global_pool)}건")
     
-    # 균형 있게 3개 선정
-    # 기본: 화제성 순으로 상위 3개
-    # 다만 국내/해외 모두 있으면 최소 각 1개씩 포함
-    top_3 = []
+    # 국내 2개 선정
+    domestic_picked = _pick_from_pool(
+        domestic_pool, selected_items=[], count=2, min_score=5
+    )
+    print(f"  국내 선정: {len(domestic_picked)}건")
     
-    # 가장 화제성 높은 것 1개 무조건
-    if evaluated_items:
-        top_3.append(evaluated_items[0])
+    # 해외 1개 선정 (화제성 6점 이상만)
+    global_picked = _pick_from_pool(
+        global_pool, selected_items=domestic_picked, count=1, min_score=6
+    )
+    print(f"  해외 선정: {len(global_picked)}건 (화제성 6점+ 기준)")
     
-    # 국내/해외 균형
-    domestic_added = 1 if top_3 and top_3[0] in domestic else 0
-    global_added = 1 if top_3 and top_3[0] in global_items else 0
+    # 결과 취합
+    top_selected = domestic_picked + global_picked
     
-    for item in evaluated_items[1:]:
-        if len(top_3) >= 3:
-            break
-        if item in top_3:
-            continue
-        
-        is_domestic = item in domestic
-        
-        # 국내/해외 균형 체크
-        if is_domestic and domestic_added >= 2:
-            continue
-        if not is_domestic and global_added >= 2:
-            continue
-        
-        top_3.append(item)
-        if is_domestic:
-            domestic_added += 1
-        else:
-            global_added += 1
+    # 해외가 약해서 3개 못 채우면 국내 3번째로 대체
+    if len(top_selected) < 3:
+        print(f"  ⚠️ 3개 미달 ({len(top_selected)}개) → 국내 추가 시도")
+        extra = _pick_from_pool(
+            domestic_pool,
+            selected_items=top_selected,
+            count=3 - len(top_selected),
+            min_score=5,
+        )
+        top_selected.extend(extra)
+        print(f"  국내 추가: {len(extra)}건")
     
-    # 3개 안 채워지면 화제성 순으로 채움
-    for item in evaluated_items:
-        if len(top_3) >= 3:
-            break
-        if item not in top_3:
-            top_3.append(item)
+    # 그래도 3개 안 되면 컷 낮춰서 채움
+    if len(top_selected) < 3:
+        print(f"  ⚠️ 여전히 3개 미달 → 컷 낮춰서 채움")
+        all_pool = sorted(
+            evaluated_items,
+            key=lambda x: x.get("evaluation", {}).get("virality_score", 0),
+            reverse=True,
+        )
+        extra = _pick_from_pool(
+            all_pool,
+            selected_items=top_selected,
+            count=3 - len(top_selected),
+            min_score=1,
+        )
+        top_selected.extend(extra)
     
-    print(f"✅ 선정 완료:")
-    for i, item in enumerate(top_3, 1):
+    # 결과 출력
+    print(f"\n✅ 최종 선정:")
+    for i, item in enumerate(top_selected, 1):
         eval_data = item.get("evaluation", {})
-        print(f"  {i}. [{eval_data.get('category', '?')}] "
-              f"화제성 {eval_data.get('virality_score', 0)}/10 - "
-              f"{item.get('title', '')[:40]}")
+        cat = eval_data.get("category", "?")
+        score = eval_data.get("virality_score", 0)
+        subjects = ", ".join(eval_data.get("key_subjects", []))
+        issue_id = eval_data.get("issue_id", "")
+        print(f"  {i}. [{cat}] 화제성 {score}/10")
+        print(f"     인물: {subjects}")
+        print(f"     이슈: {issue_id}")
+        print(f"     제목: {item.get('title', '')[:50]}")
     
-    return top_3
+    return top_selected
 
 
+# ============================================================
+# Step 2: 대본 생성
+# ============================================================
 def generate_script(client, item):
     """Step 2: 단일 이슈에 대한 심층 대본 생성 (Opus 사용)"""
     evaluation = item.get("evaluation", {})
@@ -322,6 +418,9 @@ def generate_script(client, item):
         return None
 
 
+# ============================================================
+# 전체 파이프라인
+# ============================================================
 def generate_all_scripts(api_key, items):
     """전체 파이프라인: 평가 → 선정 → 대본 생성"""
     if not api_key:
@@ -337,7 +436,7 @@ def generate_all_scripts(api_key, items):
         print("❌ 평가된 항목 없음")
         return []
     
-    # Step 1.5: 상위 3개 선정
+    # Step 1.5: 상위 3개 선정 (중복 방지)
     top_3 = select_top_3(evaluated)
     
     # Step 2: 대본 생성
