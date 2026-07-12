@@ -20,18 +20,21 @@ Summary: {summary}
 
 [YOUR TASK]
 Score this article on YouTube Shorts virality potential.
+Also identify the CORE subjects and issue ID for duplicate detection.
 
 Return ONLY valid JSON:
 {{
   "virality_score": 1-10,
   "category": "domestic" or "global",
   "subcategory": "breakup/wedding/scandal/comeback/collab/controversy/other",
+  "key_subjects": ["주요 인물 이름1", "주요 인물 이름2"],
+  "issue_id": "core-issue-slug-YYYY",
   "hook_potential": "one sentence in Korean about what makes it viral",
   "target_audience": "who would click this shorts (Korean)",
   "reason_kr": "왜 이 화제성 점수인지 한국어로 1문장"
 }}
 
-RULES:
+RULES for virality_score:
 - score 10 = 초대박 이슈 (모든 매체가 다룸, 논란/충격/화제 폭발)
 - score 8-9 = 대형 이슈 (특정 팬층 폭발적 반응)
 - score 6-7 = 중형 이슈 (일반 관심)
@@ -40,6 +43,20 @@ RULES:
 - 이미 매우 오래된 이슈는 감점
 - 단순 홍보성은 감점
 - 논란/스캔들/충격 요소는 가점
+
+RULES for key_subjects:
+- 기사에 등장하는 핵심 인물 이름 (최대 3명)
+- 예: ["아이유", "이종석"] or ["Taylor Swift", "Travis Kelce"]
+- 그룹명도 포함 가능: ["BTS", "정국"]
+
+RULES for issue_id:
+- 이슈의 핵심을 요약한 슬러그 (소문자, 하이픈)
+- 예: "iu-lee-jongsuk-breakup-2026"
+- 예: "taylor-travis-wedding-2026"
+- 예: "bts-jungkook-lesserafim-shoutout-2026"
+- 같은 이슈에서 파생된 기사들은 반드시 같은 issue_id를 가져야 함
+- 예: "아이유 이종석 결별", "아이유 유인나 발언 재조명", "아이유 이종석 이상 신호" 
+     → 모두 "iu-lee-jongsuk-breakup-2026"
 """
 
 
