@@ -1,8 +1,8 @@
 """
-유튜브 쇼츠 대본 생성기 (2단계 파이프라인 + 중복 방지)
-- Step 1: Claude Haiku로 화제성 평가 + key_subjects/issue_id 추출
-- Step 1.5: 국내 2 + 해외 1 고정 (중복 방지 + 유연 대체)
-- Step 2: Claude Opus로 심층 대본 생성 (자극적 + 공감 + 분쟁 CTA)
+유튜브 쇼츠 후킹 자동화 (Haiku 전용)
+- Step 1: 화제성 평가 + key_subjects/issue_id 추출
+- Step 1.5: 국내 8 + 해외 2 고정 (중복 방지 + 유연 대체)
+- Step 2: 각 이슈마다 후킹 3개 옵션 + 요약 생성
 """
 
 import json
@@ -11,7 +11,7 @@ from anthropic import Anthropic
 
 
 # ============================================================
-# Step 1: 화제성 평가 프롬프트 (Haiku - 빠르고 저렴)
+# Step 1: 화제성 평가 프롬프트
 # ============================================================
 EVALUATION_PROMPT = """You are evaluating entertainment news for YouTube Shorts virality.
 
@@ -56,102 +56,93 @@ RULES for issue_id:
 - 이슈의 핵심을 요약한 슬러그 (소문자, 하이픈)
 - 예: "iu-lee-jongsuk-breakup-2026"
 - 예: "taylor-travis-wedding-2026"
-- 예: "bts-jungkook-lesserafim-shoutout-2026"
-- 같은 이슈에서 파생된 기사들은 반드시 같은 issue_id를 가져야 함
-- 예: "아이유 이종석 결별", "아이유 유인나 발언 재조명", "아이유 이종석 이상 신호"
-     → 모두 "iu-lee-jongsuk-breakup-2026"
+- 같은 이슈에서 파생된 기사들은 반드시 같은 issue_id
 """
 
 
 # ============================================================
-# Step 2: 대본 생성 프롬프트 (Opus - 고품질 콘텐츠)
+# Step 2: 후킹 3개 옵션 생성 프롬프트
 # ============================================================
-SCRIPT_GENERATION_PROMPT = """You are writing a viral YouTube Shorts script for a Korean entertainment news channel.
+HOOK_GENERATION_PROMPT = """You are creating YouTube Shorts hooks for a Korean entertainment news channel.
 
-[ISSUE INFO]
+[ISSUE]
 Title: {title}
 Source: {source}
 Category: {category}
 Subcategory: {subcategory}
+Key Subjects: {key_subjects}
 Hook Potential: {hook_potential}
-Original Summary: {summary}
+Summary: {summary}
 Link: {link}
 
 ============================================================
-YOUR TASK: Write a complete 60-second YouTube Shorts script
+YOUR TASK: Create 3 different HOOKS (3-second attention grabbers)
 ============================================================
 
-[TONE REQUIREMENTS]
-- 자극적이면서도 정보 전달
-- 시청자 공감 포인트 중간중간 삽입
-- CTA는 분쟁/의견대립 유도 질문 (예/아니오로 나뉘는)
-- TTS 자연 발화용 (자연스러운 문장 흐름)
-- 카톡 친구 톤 아님, 뉴스 나레이터 톤 (하지만 딱딱하지 않게)
+[HOOK DEFINITION - 매우 중요]
+후킹은 시청자가 스크롤을 멈추게 하는 첫 3초 대사입니다.
+결과를 밝히지 않고 궁금증을 극대화해야 합니다.
 
-[STRUCTURE - MUST FOLLOW]
-Total: 약 60초 (한국어 280-310자)
+[✅ 좋은 후킹 예시]
+- "아이유가 결국 이걸 참지 못했다"
+- "유인나가 4개월 전에 이미 알고 있었다"
+- "이종석 팬들만 감지했던 그 신호"
+- "테일러 스위프트 결혼식장에서 벌어진 일"
+- "정국의 이 행동이 K-POP 판을 뒤집었다"
 
-1. 후킹 (3초, 약 15-25자):
-   - 공감 유도 시작 ("다들 ~하죠?", "이거 상상 되세요?", "다들 놀란 표정 지으셨죠?")
-   - 또는 강력한 팩트 (충격/의외성)
+[❌ 나쁜 후킹 예시 - 절대 만들지 마세요]
+- "아이유 이종석 4년 만에 결별" (결과 밝힘)
+- "다들 잘 될 줄 알았죠? 4년 만에 결별" (밋밋함)
+- "결혼식 하나에 하객이 천 명?" (정보 나열)
+- "BTS 정국이 신인 걸그룹 언급" (뉴스 헤드라인)
 
-2. 본문 (40초, 약 180-210자):
-   - 이슈 상세 설명
-   - 중간중간 공감 포인트 삽입 ("이거 그대로 믿기엔 뭔가 이상하죠?", "다들 그냥 지나쳤는데")
-   - 구체적 인용 or 세부사항 필수
-   - 인물 이름, 날짜, 장소 등 팩트 강화
+[HOOK 생성 공식 - 5가지 중 랜덤하게 사용]
 
-3. 반전/포인트 (10초, 약 45-55자):
-   - 놀라운 추가 정보 or 의혹 제기
-   - "근데 ~", "사실은 ~" 시작
+1. "결국 이걸" 공식:
+   - "[인물]이 결국 [행동]을 참지 못했다"
+   - "[인물]이 결국 [행동]을 하고야 말았다"
 
-4. CTA (7초, 약 30-40자):
-   - 반드시 분쟁 유도 질문 (예/아니오 나뉘는)
-   - 예시: "~ 진짜일까요, 아니면 ~일까요?"
-   - 예시: "~해도 될까요?"
-   - 예시: "~에 동의하시나요?"
-   - 끝: "댓글로 여러분 생각 남겨주세요"
+2. "숨겨진 신호" 공식:
+   - "[인물]이 [기간] 전에 이미 남긴 신호"
+   - "[인물]만 알고 있던 그 진실"
+   - "[인물] 팬들만 감지했던 그 신호"
 
-[FORBIDDEN]
-- 이모지 사용 금지
-- "자," 같은 필러 금지
-- 너무 정중한 표현 금지
-- 확인 안 된 팩트 지어내기 금지
-- "쓸데없는" 홍보 문구 금지
+3. "판이 바뀐 순간" 공식:
+   - "[인물]의 이 행동이 [업계] 판을 뒤집었다"
+   - "[업계]가 이 순간 조용해졌다"
 
-[ENGLISH SUBTITLES]
-Also generate English subtitles for the video (10-11 cuts).
-Format: "TIME  SUBTITLE" (each under 8 words, punchy)
-Time format: MM:SS
+4. "밖으로 새어나온" 공식:
+   - "[장소] 밖으로 새어나온 진짜 이야기"
+   - "[방송/사건]에서 잘려나간 그 장면"
+
+5. "숫자 미스터리" 공식:
+   - "[숫자]가 무엇을 의미하는지 아세요?"
+   - "이 [숫자]는 결국 [결과]로 이어졌다"
+
+[FORBIDDEN - 절대 사용 금지]
+- 이모지
+- "결별", "결혼", "논란" 등 결과 직접 명시
+- 팩트만 나열
+- 물음표 남발
+- 20자 이상 (너무 김)
+
+[LENGTH]
+- 각 후킹: 10-18자 사이
 
 [SUMMARY]
-Also write a 5-6 line factual summary in Korean of the actual article.
+Also write a 2-line factual summary in Korean.
 
 [OUTPUT - VALID JSON ONLY]
 {{
-  "issue_info": {{
-    "category_kr": "국내 or 해외",
-    "subcategory_kr": "카테고리 한국어",
-    "virality_stars": "⭐⭐⭐⭐⭐ (1-5개)",
-    "hook_summary": "한국어 1문장으로 어떤 훅인지"
-  }},
-  "article_summary_kr": [
-    "5-6줄 팩트 요약, 각 줄은 한 문장",
-    "구체적 인물명, 날짜, 인용 포함",
-    "..."
+  "hooks": [
+    "후킹 옵션 1 (10-18자)",
+    "후킹 옵션 2 (다른 공식 사용, 10-18자)",
+    "후킹 옵션 3 (또 다른 공식 사용, 10-18자)"
   ],
-  "script_kr": {{
-    "hook": "후킹 부분 (0:00-0:04)",
-    "body": "본문 부분 (0:04-0:43)",
-    "twist": "반전 부분 (0:43-0:53)",
-    "cta": "CTA 부분 (0:53-1:00)"
-  }},
-  "english_subtitles": [
-    "0:00  first subtitle",
-    "0:04  second subtitle",
-    "..."
-  ],
-  "char_count": 총_한국어_문자수
+  "summary_kr": [
+    "1줄 팩트 요약",
+    "1줄 추가 팩트"
+  ]
 }}
 """
 
@@ -167,7 +158,7 @@ def get_client(api_key):
 # Step 1: 화제성 평가
 # ============================================================
 def evaluate_articles(client, items):
-    """Step 1: 각 기사 화제성 평가 (Haiku 사용)"""
+    """Step 1: 각 기사 화제성 평가"""
     print(f"🤖 Step 1: {len(items)}건 화제성 평가 중...")
     
     evaluated = []
@@ -190,7 +181,6 @@ def evaluate_articles(client, items):
             )
             text = msg.content[0].text.strip()
             
-            # JSON 추출
             if "```" in text:
                 parts = text.split("```")
                 if len(parts) >= 2:
@@ -211,20 +201,16 @@ def evaluate_articles(client, items):
         except Exception as e:
             print(f"[WARN] 평가 실패: {item.get('title','')[:30]} - {e}")
         
-        time.sleep(0.1)  # Rate limit 방지
+        time.sleep(0.1)
     
     return evaluated
 
 
 # ============================================================
-# Step 1.5: 중복 판정 헬퍼 함수
+# Step 1.5: 중복 판정 헬퍼
 # ============================================================
 def _is_duplicate(item, selected_items):
-    """이슈 중복 판정
-    - issue_id가 같으면 중복
-    - 또는 key_subjects가 2개 이상 겹치면 중복
-    - 인물 1명뿐인데 그게 겹쳐도 중복
-    """
+    """이슈 중복 판정"""
     item_eval = item.get("evaluation", {})
     item_issue_id = item_eval.get("issue_id", "").strip().lower()
     item_subjects = set(
@@ -238,35 +224,30 @@ def _is_duplicate(item, selected_items):
             s.strip().lower() for s in sel_eval.get("key_subjects", []) if s
         )
         
-        # 룰 1: issue_id 완전 일치 = 중복
         if item_issue_id and sel_issue_id and item_issue_id == sel_issue_id:
             return True
         
-        # 룰 2: 핵심 인물 2명 이상 겹치면 중복
         overlap = item_subjects & sel_subjects
         if len(overlap) >= 2:
             return True
         
-        # 룰 3: 인물이 1명뿐인데 그게 겹치면 중복
         if len(item_subjects) == 1 and len(sel_subjects) == 1 and overlap:
             return True
     
     return False
 
 
-def _pick_from_pool(pool, selected_items, count, min_score=5):
-    """풀에서 중복 안 되게 상위 N개 선정"""
+def _pick_from_pool(pool, selected_items, count, min_score=4):
+    """풀에서 중복 없이 상위 N개"""
     picked = []
     for item in pool:
         if len(picked) >= count:
             break
         
-        # 최소 화제성 컷
         score = item.get("evaluation", {}).get("virality_score", 0)
         if score < min_score:
             continue
         
-        # 이미 선정된 것과 중복 체크
         if _is_duplicate(item, selected_items + picked):
             continue
         
@@ -276,20 +257,12 @@ def _pick_from_pool(pool, selected_items, count, min_score=5):
 
 
 # ============================================================
-# Step 1.5: 상위 3개 선정 (국내 2 + 해외 1 고정 + 유연 대체)
+# Step 1.5: 상위 10개 선정 (국내 8 + 해외 2)
 # ============================================================
-def select_top_3(evaluated_items):
-    """Step 1.5: 국내 2 + 해외 1 고정 (중복 방지 + 유연 대체)
+def select_top_10(evaluated_items):
+    """국내 8 + 해외 2 고정 (중복 방지 + 유연 대체)"""
+    print("\n🎯 상위 10개 선정 중 (국내 8 + 해외 2 목표)...")
     
-    로직:
-    1. 국내/해외 각자 화제성 순 정렬
-    2. 국내 2개 선정 (중복 없이)
-    3. 해외 1개 선정 (화제성 6점 이상, 중복 없이)
-    4. 해외 약하면 국내 3번째로 대체
-    """
-    print("\n🎯 상위 3개 선정 중 (국내 2 + 해외 1 목표)...")
-    
-    # 국내/해외 분리 + 각자 정렬
     domestic_pool = sorted(
         [i for i in evaluated_items 
          if i.get("evaluation", {}).get("category") == "domestic"],
@@ -305,36 +278,33 @@ def select_top_3(evaluated_items):
     
     print(f"  국내 풀: {len(domestic_pool)}건 / 해외 풀: {len(global_pool)}건")
     
-    # 국내 2개 선정
+    # 국내 8개 (컷 4점)
     domestic_picked = _pick_from_pool(
-        domestic_pool, selected_items=[], count=2, min_score=5
+        domestic_pool, selected_items=[], count=8, min_score=4
     )
     print(f"  국내 선정: {len(domestic_picked)}건")
     
-    # 해외 1개 선정 (화제성 6점 이상만)
+    # 해외 2개 (컷 5점)
     global_picked = _pick_from_pool(
-        global_pool, selected_items=domestic_picked, count=1, min_score=6
+        global_pool, selected_items=domestic_picked, count=2, min_score=5
     )
-    print(f"  해외 선정: {len(global_picked)}건 (화제성 6점+ 기준)")
+    print(f"  해외 선정: {len(global_picked)}건")
     
-    # 결과 취합
     top_selected = domestic_picked + global_picked
     
-    # 해외가 약해서 3개 못 채우면 국내 3번째로 대체
-    if len(top_selected) < 3:
-        print(f"  ⚠️ 3개 미달 ({len(top_selected)}개) → 국내 추가 시도")
+    # 10개 못 채우면 국내로 채움
+    if len(top_selected) < 10:
+        print(f"  ⚠️ 10개 미달 ({len(top_selected)}개) → 국내 추가")
         extra = _pick_from_pool(
             domestic_pool,
             selected_items=top_selected,
-            count=3 - len(top_selected),
-            min_score=5,
+            count=10 - len(top_selected),
+            min_score=3,
         )
         top_selected.extend(extra)
-        print(f"  국내 추가: {len(extra)}건")
     
-    # 그래도 3개 안 되면 컷 낮춰서 채움
-    if len(top_selected) < 3:
-        print(f"  ⚠️ 여전히 3개 미달 → 컷 낮춰서 채움")
+    # 그래도 못 채우면 컷 낮춤
+    if len(top_selected) < 10:
         all_pool = sorted(
             evaluated_items,
             key=lambda x: x.get("evaluation", {}).get("virality_score", 0),
@@ -343,53 +313,49 @@ def select_top_3(evaluated_items):
         extra = _pick_from_pool(
             all_pool,
             selected_items=top_selected,
-            count=3 - len(top_selected),
+            count=10 - len(top_selected),
             min_score=1,
         )
         top_selected.extend(extra)
     
-    # 결과 출력
     print(f"\n✅ 최종 선정:")
     for i, item in enumerate(top_selected, 1):
         eval_data = item.get("evaluation", {})
         cat = eval_data.get("category", "?")
         score = eval_data.get("virality_score", 0)
         subjects = ", ".join(eval_data.get("key_subjects", []))
-        issue_id = eval_data.get("issue_id", "")
-        print(f"  {i}. [{cat}] 화제성 {score}/10")
-        print(f"     인물: {subjects}")
-        print(f"     이슈: {issue_id}")
-        print(f"     제목: {item.get('title', '')[:50]}")
+        print(f"  {i}. [{cat}] 화제성 {score}/10 · 인물: {subjects}")
+        print(f"     {item.get('title', '')[:50]}")
     
     return top_selected
 
 
 # ============================================================
-# Step 2: 대본 생성
+# Step 2: 후킹 3개 옵션 생성
 # ============================================================
-def generate_script(client, item):
-    """Step 2: 단일 이슈에 대한 심층 대본 생성 (Opus 사용)"""
+def generate_hooks(client, item):
+    """단일 이슈에 대한 후킹 3개 옵션 + 요약 생성"""
     evaluation = item.get("evaluation", {})
     
-    prompt = SCRIPT_GENERATION_PROMPT.format(
+    prompt = HOOK_GENERATION_PROMPT.format(
         title=item.get("title", ""),
         source=item.get("source", ""),
         category=evaluation.get("category", ""),
         subcategory=evaluation.get("subcategory", ""),
+        key_subjects=", ".join(evaluation.get("key_subjects", [])),
         hook_potential=evaluation.get("hook_potential", ""),
-        summary=item.get("summary", "")[:800],
+        summary=item.get("summary", "")[:600],
         link=item.get("link", ""),
     )
     
     try:
         msg = client.messages.create(
-            model="claude-opus-4-7",
-            max_tokens=2500,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=800,
             messages=[{"role": "user", "content": prompt}],
         )
         text = msg.content[0].text.strip()
         
-        # JSON 추출
         if "```" in text:
             parts = text.split("```")
             if len(parts) >= 2:
@@ -403,26 +369,26 @@ def generate_script(client, item):
         if start != -1 and end != -1:
             text = text[start:end+1]
         
-        script = json.loads(text)
+        result = json.loads(text)
         
-        # 원본 기사 정보 추가
-        script["original_title"] = item.get("title", "")
-        script["original_link"] = item.get("link", "")
-        script["original_source"] = item.get("source", "")
-        script["evaluation"] = evaluation
+        # 원본 정보 추가
+        result["original_title"] = item.get("title", "")
+        result["original_link"] = item.get("link", "")
+        result["original_source"] = item.get("source", "")
+        result["evaluation"] = evaluation
         
-        return script
+        return result
     
     except Exception as e:
-        print(f"[ERROR] 대본 생성 실패: {item.get('title','')[:30]} - {e}")
+        print(f"[ERROR] 후킹 생성 실패: {item.get('title','')[:30]} - {e}")
         return None
 
 
 # ============================================================
 # 전체 파이프라인
 # ============================================================
-def generate_all_scripts(api_key, items):
-    """전체 파이프라인: 평가 → 선정 → 대본 생성"""
+def generate_all_hooks(api_key, items):
+    """전체 파이프라인: 평가 → 선정 → 후킹 생성"""
     if not api_key:
         print("[WARN] API 키 없음")
         return []
@@ -436,19 +402,19 @@ def generate_all_scripts(api_key, items):
         print("❌ 평가된 항목 없음")
         return []
     
-    # Step 1.5: 상위 3개 선정 (중복 방지)
-    top_3 = select_top_3(evaluated)
+    # Step 1.5: 상위 10개 선정
+    top_10 = select_top_10(evaluated)
     
-    # Step 2: 대본 생성
-    print(f"\n🎬 Step 2: {len(top_3)}개 대본 생성 중...")
+    # Step 2: 각 이슈마다 후킹 3개 옵션 생성
+    print(f"\n🎣 Step 2: {len(top_10)}개 이슈 후킹 생성 중...")
     
-    scripts = []
-    for i, item in enumerate(top_3, 1):
-        print(f"  {i}/{len(top_3)} 생성 중: {item.get('title','')[:40]}")
-        script = generate_script(client, item)
-        if script:
-            scripts.append(script)
-        time.sleep(0.5)
+    results = []
+    for i, item in enumerate(top_10, 1):
+        print(f"  {i}/{len(top_10)}: {item.get('title','')[:40]}")
+        hooks = generate_hooks(client, item)
+        if hooks:
+            results.append(hooks)
+        time.sleep(0.2)
     
-    print(f"✅ 총 {len(scripts)}개 대본 완성")
-    return scripts
+    print(f"✅ 총 {len(results)}개 이슈 후킹 완성")
+    return results
